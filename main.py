@@ -1458,11 +1458,13 @@ class CubulusGame:
 
     def draw_gameplay(self) -> None:
 
-        self.screen.fill(
-            config.COLORS["background"]
-        )
+        # Use the same dark tactical presentation as the main menu: the arena
+        # fills the window while translucent interface cards float above it.
+        self.screen.fill((6, 9, 15))
 
         self.draw_board()
+
+        self.draw_gameplay_atmosphere()
 
         self.draw_players()
 
@@ -1479,8 +1481,7 @@ class CubulusGame:
 
         viewport = self.board_viewport()
         cell_size = config.CELL_SIZE * self.camera_zoom
-        origin_x = viewport.centerx - self.camera_x * cell_size
-        origin_y = viewport.centery - self.camera_y * cell_size
+        origin_x, origin_y = self.board_origin(viewport, cell_size)
 
         board_height = len(self.board)
         board_width = len(self.board[0])
@@ -1490,6 +1491,7 @@ class CubulusGame:
         last_x = min(board_width, int(math.ceil((viewport.right - origin_x) / cell_size)))
         last_y = min(board_height, int(math.ceil((viewport.bottom - origin_y) / cell_size)))
         gap = max(1, int(round(cell_size * 0.09)))
+        radius = max(1, min(4, int(round(cell_size * 0.12))))
 
         previous_clip = self.screen.get_clip()
         self.screen.set_clip(viewport)
@@ -1509,33 +1511,72 @@ class CubulusGame:
                     max(1, right - left - gap),
                     max(1, bottom - top - gap)
                 )
-                color = config.COLORS.get(
-                    row[x],
+                tile_color = row[x]
+                base_color = config.COLORS.get(
+                    tile_color,
                     config.COLORS["neutral"]
                 )
-                pygame.draw.rect(self.screen, color, rect)
+                color = (
+                    (17, 24, 34)
+                    if tile_color == "neutral"
+                    else tuple(
+                        min(255, 18 + int(channel * 0.48))
+                        for channel in base_color
+                    )
+                )
+                pygame.draw.rect(
+                    self.screen,
+                    color,
+                    rect,
+                    border_radius=radius
+                )
 
         self.screen.set_clip(previous_clip)
 
     def board_viewport(self) -> pygame.Rect:
 
         width, height = self.screen.get_size()
-        return pygame.Rect(
-            0,
-            config.TOP_HUD_HEIGHT,
-            width,
-            max(
-                1,
-                height - config.TOP_HUD_HEIGHT - config.BOTTOM_HUD_HEIGHT
+        return pygame.Rect(0, 0, width, height)
+
+    def board_origin(
+        self,
+        viewport: pygame.Rect,
+        cell_size: float
+    ) -> Tuple[float, float]:
+        """Keep the arena behind the HUD, including at map edges."""
+
+        board_height = len(self.board)
+        board_width = len(self.board[0]) if board_height else 0
+        board_pixel_width = board_width * cell_size
+        board_pixel_height = board_height * cell_size
+
+        if board_pixel_width <= viewport.width:
+            origin_x = viewport.centerx - board_pixel_width / 2
+        else:
+            half_visible = viewport.width / (2 * cell_size)
+            camera_x = max(
+                half_visible,
+                min(board_width - half_visible, self.camera_x)
             )
-        )
+            origin_x = viewport.centerx - camera_x * cell_size
+
+        if board_pixel_height <= viewport.height:
+            origin_y = viewport.centery - board_pixel_height / 2
+        else:
+            half_visible = viewport.height / (2 * cell_size)
+            camera_y = max(
+                half_visible,
+                min(board_height - half_visible, self.camera_y)
+            )
+            origin_y = viewport.centery - camera_y * cell_size
+
+        return origin_x, origin_y
 
     def cell_screen_rect(self, x: int, y: int) -> pygame.Rect:
 
         viewport = self.board_viewport()
         cell_size = config.CELL_SIZE * self.camera_zoom
-        origin_x = viewport.centerx - self.camera_x * cell_size
-        origin_y = viewport.centery - self.camera_y * cell_size
+        origin_x, origin_y = self.board_origin(viewport, cell_size)
         gap = max(1, int(round(cell_size * 0.09)))
 
         left = round(origin_x + x * cell_size)
@@ -1578,10 +1619,26 @@ class CubulusGame:
             if not rect.colliderect(viewport):
                 continue
 
+            glow_rect = rect.inflate(
+                max(6, rect.width // 2),
+                max(6, rect.height // 2)
+            )
+            glow_color = tuple(
+                min(255, 22 + int(channel * 0.38))
+                for channel in color
+            )
+            pygame.draw.rect(
+                self.screen,
+                glow_color,
+                glow_rect,
+                border_radius=max(4, glow_rect.width // 3)
+            )
+
             pygame.draw.rect(
                 self.screen,
                 color,
-                rect
+                rect,
+                border_radius=max(2, rect.width // 5)
             )
 
             border_width = max(1, min(3, rect.width // 6))
@@ -1589,10 +1646,34 @@ class CubulusGame:
                 self.screen,
                 config.COLORS["white"],
                 rect,
-                border_width
+                border_width,
+                border_radius=max(2, rect.width // 5)
             )
 
         self.screen.set_clip(previous_clip)
+
+    def draw_gameplay_atmosphere(self) -> None:
+        """Add the menu's cool cinematic veil without hiding the action."""
+
+        width, height = self.screen.get_size()
+        veil = pygame.Surface((width, height), pygame.SRCALPHA)
+        veil.fill((3, 7, 13, 22))
+
+        band_count = 8
+        for band in range(band_count):
+            band_height = height // band_count + 1
+            top_alpha = max(0, 36 - band * 6)
+            bottom_alpha = max(0, 36 - (band_count - 1 - band) * 6)
+            alpha = max(top_alpha, bottom_alpha)
+            band_rect = pygame.Rect(
+                0,
+                band * height // band_count,
+                width,
+                band_height
+            )
+            pygame.draw.rect(veil, (2, 5, 10, alpha), band_rect)
+
+        self.screen.blit(veil, (0, 0))
 
     def draw_damage_flash(self) -> None:
 
@@ -1611,62 +1692,197 @@ class CubulusGame:
     def draw_ui_panel(self) -> None:
 
         width, height = self.screen.get_size()
-        human_lives = self.players[0].lives if self.players else 0
+        margin = max(14, min(24, width // 45))
 
-        lives_surface = self.hud_font.render(
-            f"Leben: {human_lives}",
-            True,
-            config.COLORS["white"]
+        brand_rect = pygame.Rect(
+            margin,
+            margin,
+            min(260, max(205, width // 4)),
+            72
         )
-        shadow_surface = self.hud_font.render(
-            f"Leben: {human_lives}",
-            True,
-            (65, 65, 65)
+        self.draw_glass_panel(brand_rect)
+        pygame.draw.circle(
+            self.screen,
+            (90, 190, 255),
+            (brand_rect.x + 19, brand_rect.y + 20),
+            5
         )
-        self.screen.blit(shadow_surface, (14, 15))
-        self.screen.blit(lives_surface, (12, 13))
+        eyebrow = self.small_font.render(
+            "MATCH LÄUFT",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(eyebrow, (brand_rect.x + 32, brand_rect.y + 10))
+        title = self.menu_heading_font.render(
+            "CUBULUS",
+            True,
+            (248, 250, 255)
+        )
+        self.screen.blit(title, (brand_rect.x + 17, brand_rect.y + 35))
 
+        mode = config.GAME_MODES[self.mode_index]
+        mode_label = "10 MINUTEN" if mode == "Timed" else "ENDLOS"
         remaining = self.remaining_time()
-        if remaining is not None:
-            timer = self.hud_font.render(
-                f"Zeit: {remaining}s",
-                True,
+        match_value = (
+            f"{remaining // 60:02d}:{remaining % 60:02d}"
+            if remaining is not None
+            else mode_label
+        )
+        info_width = min(230, max(175, width // 5))
+        info_rect = pygame.Rect(
+            width - margin - info_width,
+            margin,
+            info_width,
+            72
+        )
+        self.draw_glass_panel(info_rect)
+        mode_surface = self.small_font.render(
+            mode_label,
+            True,
+            (126, 140, 159)
+        )
+        self.screen.blit(mode_surface, (info_rect.x + 17, info_rect.y + 11))
+        value_surface = self.menu_heading_font.render(
+            match_value,
+            True,
+            (244, 247, 252)
+        )
+        self.screen.blit(value_surface, (info_rect.x + 17, info_rect.y + 34))
+        esc_surface = self.small_font.render(
+            "ESC  PAUSE",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(
+            esc_surface,
+            (
+                info_rect.right - esc_surface.get_width() - 16,
+                info_rect.y + 14
+            )
+        )
+
+        compact = width < 760
+        score_height = 154 if compact else 100
+        score_width = min(width - margin * 2, 920)
+        score_rect = pygame.Rect(
+            (width - score_width) // 2,
+            height - margin - score_height,
+            score_width,
+            score_height
+        )
+        self.draw_glass_panel(score_rect, fill=(7, 12, 20, 222))
+
+        column_count = 2 if compact else max(1, len(self.players))
+        row_count = 2 if compact else 1
+        column_width = score_rect.width / column_count
+        row_height = score_rect.height / row_count
+
+        for index, player in enumerate(self.players):
+            column = index % column_count
+            row = index // column_count
+            item_rect = pygame.Rect(
+                round(score_rect.x + column * column_width),
+                round(score_rect.y + row * row_height),
+                round(column_width),
+                round(row_height)
+            )
+            selected = player.is_human
+            if selected:
+                highlight = item_rect.inflate(-8, -8)
+                pygame.draw.rect(
+                    self.screen,
+                    (22, 36, 52, 205),
+                    highlight,
+                    border_radius=12
+                )
+                pygame.draw.rect(
+                    self.screen,
+                    (83, 166, 255),
+                    highlight,
+                    1,
+                    border_radius=12
+                )
+            elif column > 0:
+                divider_x = item_rect.left
+                pygame.draw.line(
+                    self.screen,
+                    (67, 81, 101),
+                    (divider_x, item_rect.top + 18),
+                    (divider_x, item_rect.bottom - 18),
+                    1
+                )
+
+            content_x = item_rect.x + 19
+            color = config.COLORS.get(
+                player.color,
                 config.COLORS["white"]
             )
-            self.screen.blit(timer, (width - timer.get_width() - 14, 13))
+            pygame.draw.circle(
+                self.screen,
+                color,
+                (content_x + 6, item_rect.y + 27),
+                6
+            )
+            name = "DU" if player.is_human else player.name.upper()
+            name_surface = self.small_font.render(
+                name,
+                True,
+                (244, 247, 252) if player.alive else (91, 101, 115)
+            )
+            self.screen.blit(name_surface, (content_x + 19, item_rect.y + 18))
 
-        panel_rect = pygame.Rect(
-            0,
-            height - config.BOTTOM_HUD_HEIGHT,
-            width,
-            config.BOTTOM_HUD_HEIGHT
-        )
-        pygame.draw.rect(self.screen, config.COLORS["panel"], panel_rect)
+            territory = self.territory_counts.get(player.player_id, 0)
+            score_surface = self.menu_heading_font.render(
+                f"{territory:03d}",
+                True,
+                (244, 247, 252) if player.alive else (91, 101, 115)
+            )
+            self.screen.blit(score_surface, (content_x, item_rect.y + 48))
+            label_surface = self.small_font.render(
+                "GEBIETE",
+                True,
+                (126, 140, 159)
+            )
+            self.screen.blit(
+                label_surface,
+                (content_x + score_surface.get_width() + 8, item_rect.y + 55)
+            )
 
-        color_labels = (
-            ("Rot", "red"),
-            ("Gelb", "yellow"),
-            ("Grün", "green"),
-            ("Blau", "blue")
+            pip_y = item_rect.y + (63 if compact else 72)
+            pip_x = item_rect.right - 24
+            for life_index in range(config.PLAYER_LIVES - 1, -1, -1):
+                filled = life_index < player.lives
+                pygame.draw.circle(
+                    self.screen,
+                    color if filled else (65, 76, 91),
+                    (pip_x, pip_y),
+                    4,
+                    0 if filled else 1
+                )
+                pip_x -= 13
+
+    def draw_glass_panel(
+        self,
+        rect: pygame.Rect,
+        fill: Tuple[int, int, int, int] = (7, 12, 20, 205)
+    ) -> None:
+        """Draw a translucent card from the main-menu visual system."""
+
+        panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(
+            panel,
+            fill,
+            panel.get_rect(),
+            border_radius=18
         )
-        counts_by_color = {
-            player.color: self.territory_counts.get(player.player_id, 0)
-            for player in self.players
-        }
-        territory_text = "Gebiete - " + " | ".join(
-            f"{label}: {counts_by_color.get(color, 0)}"
-            for label, color in color_labels
+        pygame.draw.rect(
+            panel,
+            (75, 94, 119, 120),
+            panel.get_rect(),
+            1,
+            border_radius=18
         )
-        territory_surface = self.hud_font.render(
-            territory_text,
-            True,
-            config.COLORS["white"]
-        )
-        text_position = (
-            width // 2 - territory_surface.get_width() // 2,
-            panel_rect.centery - territory_surface.get_height() // 2 - 2
-        )
-        self.screen.blit(territory_surface, text_position)
+        self.screen.blit(panel, rect.topleft)
 
     # ------------------------------------------------------------------
     # Pause menu

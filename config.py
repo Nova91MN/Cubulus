@@ -17,10 +17,6 @@ CAMERA_ZOOM_STEP = 0.35
 CAMERA_FOLLOW_SPEED = 7.5
 CAMERA_ZOOM_SPEED = 9.0
 
-# Fixed screen-space UI areas (the camera only draws between these bars).
-TOP_HUD_HEIGHT = 92
-BOTTOM_HUD_HEIGHT = 72
-
 # Game settings
 PLAYER_LIVES = 3
 DAMAGE_COOLDOWN_MS = 1200

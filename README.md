@@ -16,8 +16,10 @@ claim territory, fight on contact, and automatically begin a new round when a
 winner remains. This simulation is decorative and does not change the player's
 match state.
 
-The camera follows the human player smoothly. Its zoom range, speed, HUD sizes,
-colors, and initial scale can be adjusted in `config.py`.
+The camera follows the human player smoothly. Its zoom range, speed, colors,
+and initial scale can be adjusted in `config.py`. The match uses the same dark
+tactical arena, translucent cards, blue accents, and compact live scores as the
+main menu, with the board continuing behind the floating HUD.
 
 A collision with a stronger opponent costs one life. After taking damage, the
 player briefly becomes invulnerable and returns to the spawn point. Losing all
