@@ -31,9 +31,17 @@ CAMERA_ZOOM_SPEED = 9.0
 PLAYER_LIVES = 3
 DAMAGE_COOLDOWN_MS = 1200
 DAMAGE_FLASH_MS = 280
-BOT_MOVE_CHANCE = 0.4  # Probability a bot attempts a move this frame
 TIMED_MODE_SECONDS = 600
 PLAYER_MOVE_INTERVAL_MS = 85
+
+# Difficulty affects how often bots move and how consistently they pursue the
+# human player.  Keeping the values here makes them easy to tune.
+DIFFICULTY_LEVELS = ("Easy", "Normal", "Hard")
+DIFFICULTY_PROFILES = {
+    "Easy": {"bot_move_chance": 0.12, "bot_chase_chance": 0.25},
+    "Normal": {"bot_move_chance": 0.24, "bot_chase_chance": 0.55},
+    "Hard": {"bot_move_chance": 0.40, "bot_chase_chance": 0.85},
+}
 
 # Colors used in the game
 COLORS = {
@@ -47,6 +55,7 @@ COLORS = {
     "blue": (0, 112, 221),
     "white": (248, 248, 248),
     "muted": (178, 178, 178),
+    "obstacle": (70, 79, 92),
 }
 
 # Player configuration

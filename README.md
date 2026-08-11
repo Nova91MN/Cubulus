@@ -1,4 +1,4 @@
-# Cubulus
+# Cubulus 0.2.0
 
 Cubulus is a small territory game built with Python and Pygame.
 
@@ -11,6 +11,16 @@ Cubulus is a small territory game built with Python and Pygame.
 - Mouse wheel or `+` / `-`: smoothly zoom the camera
 - `0`: reset the zoom
 - `Esc`: open or close the pause menu during a match
+
+## Player name and difficulty
+
+Use **Player name / Spielername** in the main menu to enter a name of up to
+16 characters. The name is shown in the match HUD and saved with the other
+settings, so it is restored on the next launch.
+
+The **Difficulty / Schwierigkeit** row offers Easy, Normal, and Hard. Higher
+levels make the bots move more frequently and pursue the human player more
+consistently. The selected difficulty is also saved automatically.
 
 ## Language
 
@@ -38,6 +48,11 @@ A map uses this format:
     [77, 2],
     [2, 57],
     [77, 57]
+  ],
+  "obstacles": [
+    [20, 12],
+    [21, 12],
+    [22, 12]
   ]
 }
 ```
@@ -46,6 +61,19 @@ A map uses this format:
 - `width` and `height` are required integers from 4 through 500.
 - `player_starts` is optional. It must contain four unique `[x, y]` positions
   inside the map. If omitted, the four corners are used.
+- `obstacles` is optional. Every `[x, y]` entry creates a solid field that
+  players and bots cannot enter. Obstacles may not overlap player starts.
+
+## Level editor
+
+Choose **Level editor / Level-Editor** in the main menu to create a map without
+editing JSON by hand. Left-click fields to add or remove obstacles; right-click
+to erase one. Press `1` through `4`, then click a field, to place the four player
+starts. The sidebar changes the level name, width, and height and can clear,
+save, or close the editor. Keyboard shortcuts are shown at the bottom.
+
+Saved levels are placed in the `maps` folder next to the Cubulus settings file,
+selected immediately, and discovered automatically on future launches.
 
 See `maps/example_custom.json` for a ready-to-edit example.
 

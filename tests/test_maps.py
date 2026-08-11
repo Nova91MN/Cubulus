@@ -13,7 +13,8 @@ except ModuleNotFoundError:
     pygame_stub.Surface = type("Surface", (), {})
     sys.modules["pygame"] = pygame_stub
 
-from main import CubulusGame, TRANSLATIONS  # noqa: E402
+import config  # noqa: E402
+from main import APP_VERSION, CubulusGame, TRANSLATIONS  # noqa: E402
 
 
 class MapLoadingTests(unittest.TestCase):
@@ -55,6 +56,72 @@ class MapLoadingTests(unittest.TestCase):
     def test_invalid_start_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "outside the map"):
             CubulusGame.load_map_file(self.fixtures / "invalid_start.json")
+
+    def test_obstacles_are_normalized_and_block_movement(self) -> None:
+        data = CubulusGame.load_map_file(self.fixtures / "obstacles.json")
+        self.assertEqual([[1, 0], [2, 2]], data["obstacles"])
+
+        game = CubulusGame.__new__(CubulusGame)
+        game.map_data = data
+        game.color_index = 0
+        game.player_name = "Nova"
+        game.board = []
+        game.players = []
+        game.reset_board()
+        game.create_players()
+
+        human = game.players[0]
+        self.assertFalse(game.try_move_player(human, 1, 0))
+        self.assertEqual((0, 0), human.position)
+        self.assertEqual("obstacle", game.board[0][1])
+
+    def test_editor_data_contains_sorted_obstacles(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.editor_name = "Test Level"
+        game.editor_width = 8
+        game.editor_height = 6
+        game.editor_starts = [(0, 0), (7, 0), (0, 5), (7, 5)]
+        game.editor_obstacles = {(4, 3), (1, 1), (3, 1)}
+
+        self.assertEqual(
+            [[1, 1], [3, 1], [4, 3]],
+            game.editor_map_data()["obstacles"],
+        )
+
+
+class SettingsTests(unittest.TestCase):
+    def test_player_name_and_difficulty_are_saved(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.settings_path = Path("settings.json")
+        game.auto_movement_enabled = True
+        game.preferred_camera_zoom = 3.0
+        game.screen = mock.Mock()
+        game.screen.get_size.return_value = (960, 720)
+        game.debug_mode = False
+        game.game_speed_index = config.DEBUG_SPEED_OPTIONS.index(1.0)
+        game.mode_index = 0
+        game.color_index = 1
+        game.difficulty_index = 2
+        game.player_name = "Nova"
+        game.language = "de"
+        game.map_path = Path("maps/default.json")
+
+        with (
+            mock.patch("builtins.open", mock.mock_open()),
+            mock.patch("main.json.dump") as dump,
+            mock.patch.object(Path, "mkdir"),
+            mock.patch.object(Path, "replace"),
+        ):
+            game.save_settings()
+        settings = dump.call_args.args[0]
+
+        self.assertEqual("Nova", settings["player_name"])
+        self.assertEqual(2, settings["difficulty_index"])
+        self.assertEqual("0.2.0", APP_VERSION)
+
+    def test_player_name_is_sanitized(self) -> None:
+        self.assertEqual("Nova Player", CubulusGame.sanitize_player_name("  Nova   Player  "))
+        self.assertEqual(config.PLAYER_NAMES[0], CubulusGame.sanitize_player_name(""))
 
 
 class TranslationTests(unittest.TestCase):

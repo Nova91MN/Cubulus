@@ -2,12 +2,15 @@ import json
 import math
 import os
 import random
+import re
 import sys
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
-print("Cubulus v0.0.4 Demo - Python build")
+APP_VERSION = "0.2.0"
+
+print(f"Cubulus v{APP_VERSION} Demo - Python build")
 
 try:
     import pygame
@@ -28,10 +31,13 @@ PAUSE_MENU_ITEMS = (
 
 MENU_ITEMS = (
     "menu_start",
+    "menu_player_name",
+    "menu_difficulty",
     "menu_mode",
     "menu_color",
     "menu_map",
     "menu_load_map",
+    "menu_level_editor",
     "menu_options",
     "menu_quit"
 )
@@ -52,10 +58,13 @@ TRANSLATIONS = {
         "status_awaiting": "Bereit zum Start",
         "status_match_running": "Match läuft",
         "menu_start": "Spiel starten",
+        "menu_player_name": "Spielername",
+        "menu_difficulty": "Schwierigkeit",
         "menu_mode": "Spielmodus",
         "menu_color": "Spielfarbe",
         "menu_map": "Karte",
         "menu_load_map": "Eigene Map laden",
+        "menu_level_editor": "Level-Editor",
         "menu_options": "Optionen",
         "menu_quit": "Beenden",
         "pause_continue": "Fortsetzen",
@@ -70,6 +79,9 @@ TRANSLATIONS = {
         "language_name": "Deutsch",
         "mode_untimed": "Endlos",
         "mode_timed": "10 Minuten",
+        "difficulty_easy": "Leicht",
+        "difficulty_normal": "Normal",
+        "difficulty_hard": "Schwer",
         "color_red": "Rot",
         "color_yellow": "Gelb",
         "color_green": "Grün",
@@ -114,15 +126,35 @@ TRANSLATIONS = {
         "lives": "LEBEN",
         "pause_hint": "W/S AUSWAHL   ENTER BESTÄTIGEN   ESC FORTSETZEN",
         "again_hint": "ENTER: Noch einmal  |  ESC: Beenden",
+        "name_title": "SPIELERNAME",
+        "name_hint": "Namen eingeben   ENTER SPEICHERN   ESC ABBRECHEN",
+        "editor_title": "LEVEL-EDITOR",
+        "editor_name": "Name",
+        "editor_width": "Breite",
+        "editor_height": "Höhe",
+        "editor_save": "Speichern",
+        "editor_clear": "Leeren",
+        "editor_back": "Zurück",
+        "editor_obstacle": "Hindernis",
+        "editor_start": "Start {number}",
+        "editor_hint": "Linksklick: Hindernis   Rechtsklick: Löschen   1–4: Startpunkt",
+        "editor_keys": "N: Name   [ ]: Breite   - +: Höhe   S: Speichern   ESC: Zurück",
+        "editor_saved": "Level gespeichert: {name}",
+        "editor_save_failed": "Speichern fehlgeschlagen: {error}",
+        "editor_start_selected": "Startpunkt {number} wählen und auf ein Feld klicken.",
+        "editor_name_prompt": "Levelname eingeben",
     },
     "en": {
         "status_awaiting": "Ready to start",
         "status_match_running": "Match running",
         "menu_start": "Start game",
+        "menu_player_name": "Player name",
+        "menu_difficulty": "Difficulty",
         "menu_mode": "Game mode",
         "menu_color": "Player color",
         "menu_map": "Map",
         "menu_load_map": "Load custom map",
+        "menu_level_editor": "Level editor",
         "menu_options": "Options",
         "menu_quit": "Quit",
         "pause_continue": "Continue",
@@ -137,6 +169,9 @@ TRANSLATIONS = {
         "language_name": "English",
         "mode_untimed": "Untimed",
         "mode_timed": "10 minutes",
+        "difficulty_easy": "Easy",
+        "difficulty_normal": "Normal",
+        "difficulty_hard": "Hard",
         "color_red": "Red",
         "color_yellow": "Yellow",
         "color_green": "Green",
@@ -181,13 +216,30 @@ TRANSLATIONS = {
         "lives": "LIVES",
         "pause_hint": "W/S SELECT   ENTER CONFIRM   ESC CONTINUE",
         "again_hint": "ENTER: Play again  |  ESC: Quit",
+        "name_title": "PLAYER NAME",
+        "name_hint": "Type a name   ENTER SAVE   ESC CANCEL",
+        "editor_title": "LEVEL EDITOR",
+        "editor_name": "Name",
+        "editor_width": "Width",
+        "editor_height": "Height",
+        "editor_save": "Save",
+        "editor_clear": "Clear",
+        "editor_back": "Back",
+        "editor_obstacle": "Obstacle",
+        "editor_start": "Start {number}",
+        "editor_hint": "Left click: obstacle   Right click: erase   1–4: start point",
+        "editor_keys": "N: name   [ ]: width   - +: height   S: save   ESC: back",
+        "editor_saved": "Level saved: {name}",
+        "editor_save_failed": "Could not save: {error}",
+        "editor_start_selected": "Choose start point {number}, then click a cell.",
+        "editor_name_prompt": "Enter a level name",
     },
 }
 
 MENU_GRID_WIDTH = 44
 MENU_GRID_HEIGHT = 30
 MENU_BOT_STEP_MS = 82
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 3
 MIN_MAP_SIZE = 4
 MAX_MAP_SIZE = 500
 
@@ -291,7 +343,7 @@ class CubulusGame:
             pygame.RESIZABLE
         )
 
-        pygame.display.set_caption("Cubulus v0.0.4 Demo")
+        pygame.display.set_caption(f"Cubulus v{APP_VERSION} Demo")
 
         self.clock = pygame.time.Clock()
 
@@ -351,6 +403,17 @@ class CubulusGame:
         self.color_index = self.valid_saved_index(
             saved_settings.get("player_color_index"),
             len(config.PLAYER_COLOR_OPTIONS)
+        )
+        saved_difficulty = saved_settings.get("difficulty_index")
+        self.difficulty_index = (
+            saved_difficulty
+            if isinstance(saved_difficulty, int)
+            and not isinstance(saved_difficulty, bool)
+            and 0 <= saved_difficulty < len(config.DIFFICULTY_LEVELS)
+            else config.DIFFICULTY_LEVELS.index("Normal")
+        )
+        self.player_name = self.sanitize_player_name(
+            saved_settings.get("player_name", config.PLAYER_NAMES[0])
         )
 
         self.status_message = self.t("status_awaiting")
@@ -413,6 +476,7 @@ class CubulusGame:
         self.menu_item_rects: List[pygame.Rect] = []
         self.options_selection = 0
         self.options_item_rects: List[pygame.Rect] = []
+        self.name_draft = self.player_name
         saved_auto_movement = saved_settings.get("auto_movement_enabled")
         self.auto_movement_enabled = (
             saved_auto_movement
@@ -444,6 +508,22 @@ class CubulusGame:
         self.menu_battle_message_until = 0
         self.menu_clash_position: Optional[Coordinate] = None
         self.menu_clash_until = 0
+
+        self.editor_name = self.t("editor_name_prompt")
+        self.editor_name_draft = self.editor_name
+        self.editor_width = 30
+        self.editor_height = 20
+        self.editor_starts: List[Coordinate] = []
+        self.editor_obstacles: Set[Coordinate] = set()
+        self.editor_selected_start: Optional[int] = None
+        self.editor_editing_name = False
+        self.editor_grid_rect = pygame.Rect(0, 0, 0, 0)
+        self.editor_cell_size = 1.0
+        self.editor_button_rects: Dict[str, pygame.Rect] = {}
+        self.editor_notice = ""
+        self.editor_notice_until = 0
+        self.editor_saved_path: Optional[Path] = None
+        self.reset_editor_starts()
         self.reset_menu_battle()
 
     # ------------------------------------------------------------------
@@ -487,6 +567,16 @@ class CubulusGame:
                 return value
         return 0
 
+    @staticmethod
+    def sanitize_player_name(value: object) -> str:
+        """Return a short, printable player name suitable for the HUD."""
+
+        if not isinstance(value, str):
+            return config.PLAYER_NAMES[0]
+        cleaned = "".join(character for character in value if character.isprintable())
+        cleaned = " ".join(cleaned.split()).strip()
+        return cleaned[:16] or config.PLAYER_NAMES[0]
+
     def load_settings(self) -> Dict:
         try:
             with open(self.settings_path, "r", encoding="utf-8") as handle:
@@ -512,6 +602,8 @@ class CubulusGame:
             "game_speed": config.DEBUG_SPEED_OPTIONS[self.game_speed_index],
             "game_mode_index": self.mode_index,
             "player_color_index": self.color_index,
+            "difficulty_index": self.difficulty_index,
+            "player_name": self.player_name,
             "language": self.language,
             "map_path": str(self.map_path),
         }
@@ -632,12 +724,37 @@ class CubulusGame:
         if len({tuple(position) for position in player_starts}) != 4:
             raise ValueError("player starts must be unique")
 
+        raw_obstacles = data.get("obstacles", [])
+        if not isinstance(raw_obstacles, list):
+            raise ValueError("'obstacles' must be a list of [x, y] positions")
+
+        obstacles: List[List[int]] = []
+        occupied = {tuple(position) for position in player_starts}
+        for index, position in enumerate(raw_obstacles):
+            if (
+                not isinstance(position, (list, tuple))
+                or len(position) != 2
+                or not all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in position
+                )
+            ):
+                raise ValueError(f"obstacle {index} must be an [x, y] integer pair")
+            x, y = position
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(f"obstacle {index} is outside the map")
+            if (x, y) in occupied:
+                raise ValueError(f"obstacle {index} overlaps a player start")
+            if [x, y] not in obstacles:
+                obstacles.append([x, y])
+
         normalized = dict(data)
         normalized.update({
             "name": name,
             "width": width,
             "height": height,
             "player_starts": player_starts,
+            "obstacles": obstacles,
         })
         print(f"Loaded map: {name} ({width} x {height})")
         return normalized
@@ -648,9 +765,11 @@ class CubulusGame:
     ) -> List[Tuple[Path, Dict]]:
         """Find valid bundled maps plus a previously selected custom map."""
 
-        map_dir = Path(__file__).resolve().parent / "maps"
+        bundled_map_dir = Path(__file__).resolve().parent / "maps"
+        user_map_dir = self.settings_path.parent / "maps"
         candidates = sorted(
-            map_dir.glob("*.json"),
+            list(bundled_map_dir.glob("*.json"))
+            + list(user_map_dir.glob("*.json")),
             key=lambda path: (path.name != "default.json", path.name.lower())
         )
         if extra_path is not None:
@@ -734,6 +853,380 @@ class CubulusGame:
         self.map_notice_until = pygame.time.get_ticks() + 3500
         self.save_settings()
 
+    # ------------------------------------------------------------------
+    # Level editor
+    # ------------------------------------------------------------------
+
+    def reset_editor_starts(self) -> None:
+        """Place four valid starts in the editor's corners."""
+
+        self.editor_starts = [
+            (0, 0),
+            (self.editor_width - 1, 0),
+            (0, self.editor_height - 1),
+            (self.editor_width - 1, self.editor_height - 1),
+        ]
+        self.editor_obstacles.difference_update(self.editor_starts)
+
+    def start_level_editor(self) -> None:
+        """Open a fresh, playable level editor canvas."""
+
+        self.editor_name = "Mein Level" if self.language == "de" else "My Level"
+        self.editor_name_draft = self.editor_name
+        self.editor_width = 30
+        self.editor_height = 20
+        self.editor_obstacles = set()
+        self.editor_selected_start = None
+        self.editor_editing_name = False
+        self.editor_saved_path = None
+        self.editor_notice = ""
+        self.reset_editor_starts()
+        self.state = "editor"
+
+    def resize_editor(self, width_delta: int, height_delta: int) -> None:
+        new_width = clamp(
+            self.editor_width + width_delta,
+            MIN_MAP_SIZE,
+            MAX_MAP_SIZE
+        )
+        new_height = clamp(
+            self.editor_height + height_delta,
+            MIN_MAP_SIZE,
+            MAX_MAP_SIZE
+        )
+        if (new_width, new_height) == (self.editor_width, self.editor_height):
+            return
+        self.editor_width = new_width
+        self.editor_height = new_height
+        self.editor_obstacles = {
+            (x, y)
+            for x, y in self.editor_obstacles
+            if x < new_width and y < new_height
+        }
+        self.reset_editor_starts()
+
+    def editor_map_data(self) -> Dict:
+        return {
+            "name": self.editor_name.strip()[:64] or "Custom Level",
+            "width": self.editor_width,
+            "height": self.editor_height,
+            "player_starts": [list(position) for position in self.editor_starts],
+            "obstacles": [
+                [x, y]
+                for x, y in sorted(
+                    self.editor_obstacles,
+                    key=lambda position: (position[1], position[0])
+                )
+            ],
+        }
+
+    def save_editor_level(self) -> None:
+        """Save the edited level and immediately select it in the menu."""
+
+        data = self.editor_map_data()
+        user_map_dir = self.settings_path.parent / "maps"
+        slug = re.sub(r"[^a-z0-9_-]+", "-", data["name"].lower()).strip("-_")
+        slug = slug or "custom-level"
+
+        path = self.editor_saved_path
+        if path is None:
+            path = user_map_dir / f"{slug}.json"
+            suffix = 2
+            while path.exists():
+                path = user_map_dir / f"{slug}-{suffix}.json"
+                suffix += 1
+
+        temporary_path = path.with_suffix(".tmp")
+        try:
+            user_map_dir.mkdir(parents=True, exist_ok=True)
+            with open(temporary_path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+            temporary_path.replace(path)
+            normalized = self.load_map_file(path)
+        except (OSError, ValueError) as exc:
+            self.editor_notice = self.t("editor_save_failed", error=str(exc))
+            self.editor_notice_until = pygame.time.get_ticks() + 5000
+            return
+
+        self.editor_saved_path = path
+        resolved = path.resolve(strict=False)
+        for index, (known_path, _) in enumerate(self.available_maps):
+            if known_path.resolve(strict=False) == resolved:
+                self.available_maps[index] = (path, normalized)
+                self.map_index = index
+                break
+        else:
+            self.available_maps.append((path, normalized))
+            self.map_index = len(self.available_maps) - 1
+        self.map_path, self.map_data = self.available_maps[self.map_index]
+        self.editor_notice = self.t("editor_saved", name=normalized["name"])
+        self.editor_notice_until = pygame.time.get_ticks() + 3500
+        self.map_notice = self.editor_notice
+        self.map_notice_until = self.editor_notice_until
+        self.save_settings()
+
+    def editor_cell_at(self, position: Coordinate) -> Optional[Coordinate]:
+        if not self.editor_grid_rect.collidepoint(position):
+            return None
+        x = int((position[0] - self.editor_grid_rect.x) / self.editor_cell_size)
+        y = int((position[1] - self.editor_grid_rect.y) / self.editor_cell_size)
+        if 0 <= x < self.editor_width and 0 <= y < self.editor_height:
+            return x, y
+        return None
+
+    def begin_editor_name_entry(self) -> None:
+        self.editor_name_draft = self.editor_name
+        self.editor_editing_name = True
+        pygame.key.start_text_input()
+
+    def activate_editor_button(self, button: str) -> None:
+        if button == "name":
+            self.begin_editor_name_entry()
+        elif button == "width_down":
+            self.resize_editor(-1, 0)
+        elif button == "width_up":
+            self.resize_editor(1, 0)
+        elif button == "height_down":
+            self.resize_editor(0, -1)
+        elif button == "height_up":
+            self.resize_editor(0, 1)
+        elif button == "save":
+            self.save_editor_level()
+        elif button == "clear":
+            self.editor_obstacles.clear()
+        elif button == "back":
+            self.state = "menu"
+            self.menu_selection = 0
+
+    def handle_editor_click(self, position: Coordinate, button: int) -> None:
+        if button == 1:
+            for key, rect in self.editor_button_rects.items():
+                if rect.collidepoint(position):
+                    self.activate_editor_button(key)
+                    return
+
+        cell = self.editor_cell_at(position)
+        if cell is None:
+            return
+        if button == 3:
+            self.editor_obstacles.discard(cell)
+            return
+        if button != 1:
+            return
+
+        if self.editor_selected_start is not None:
+            if cell not in self.editor_starts:
+                self.editor_starts[self.editor_selected_start] = cell
+                self.editor_obstacles.discard(cell)
+            self.editor_selected_start = None
+            return
+
+        if cell in self.editor_starts:
+            return
+        if cell in self.editor_obstacles:
+            self.editor_obstacles.remove(cell)
+        else:
+            self.editor_obstacles.add(cell)
+
+    def editor_loop(self) -> None:
+        while self.state == "editor" and self.running:
+            self.clock.tick(config.FPS)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    return
+                if event.type == pygame.VIDEORESIZE:
+                    self.handle_resize(event.size)
+                    continue
+                if event.type == pygame.TEXTINPUT and self.editor_editing_name:
+                    printable = "".join(
+                        character for character in event.text
+                        if character.isprintable()
+                    )
+                    self.editor_name_draft = (
+                        self.editor_name_draft + printable
+                    )[:32]
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if self.editor_editing_name:
+                        if event.key == pygame.K_ESCAPE:
+                            self.editor_editing_name = False
+                            pygame.key.stop_text_input()
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.editor_name_draft = self.editor_name_draft[:-1]
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            candidate = " ".join(self.editor_name_draft.split())
+                            if candidate:
+                                self.editor_name = candidate[:64]
+                            self.editor_editing_name = False
+                            pygame.key.stop_text_input()
+                        continue
+
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "menu"
+                        self.menu_selection = 0
+                        return
+                    if event.key == pygame.K_n:
+                        self.begin_editor_name_entry()
+                    elif event.key == pygame.K_s:
+                        self.save_editor_level()
+                    elif event.key == pygame.K_c:
+                        self.editor_obstacles.clear()
+                    elif event.key == pygame.K_LEFTBRACKET:
+                        self.resize_editor(-1, 0)
+                    elif event.key == pygame.K_RIGHTBRACKET:
+                        self.resize_editor(1, 0)
+                    elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                        self.resize_editor(0, -1)
+                    elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                        self.resize_editor(0, 1)
+                    elif pygame.K_1 <= event.key <= pygame.K_4:
+                        self.editor_selected_start = event.key - pygame.K_1
+                        self.editor_notice = self.t(
+                            "editor_start_selected",
+                            number=self.editor_selected_start + 1
+                        )
+                        self.editor_notice_until = pygame.time.get_ticks() + 3000
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    self.handle_editor_click(event.pos, event.button)
+
+            self.draw_editor()
+
+    def draw_editor(self) -> None:
+        width, height = self.screen.get_size()
+        self.screen.fill((6, 9, 15))
+
+        title = self.title_font.render(self.t("editor_title"), True, (248, 250, 255))
+        self.screen.blit(title, (24, 20))
+        subtitle = self.small_font.render(
+            f"{self.editor_name}  ·  {self.editor_width} × {self.editor_height}",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(subtitle, (26, 61))
+
+        sidebar_width = min(265, max(220, width // 4))
+        grid_area = pygame.Rect(24, 96, width - sidebar_width - 64, height - 160)
+        cell_size = max(
+            1.0,
+            min(
+                grid_area.width / self.editor_width,
+                grid_area.height / self.editor_height
+            )
+        )
+        grid_width = cell_size * self.editor_width
+        grid_height = cell_size * self.editor_height
+        self.editor_grid_rect = pygame.Rect(
+            round(grid_area.centerx - grid_width / 2),
+            round(grid_area.centery - grid_height / 2),
+            max(1, round(grid_width)),
+            max(1, round(grid_height))
+        )
+        self.editor_cell_size = cell_size
+
+        for y in range(self.editor_height):
+            for x in range(self.editor_width):
+                rect = pygame.Rect(
+                    round(self.editor_grid_rect.x + x * cell_size),
+                    round(self.editor_grid_rect.y + y * cell_size),
+                    max(1, math.ceil(cell_size) - 1),
+                    max(1, math.ceil(cell_size) - 1)
+                )
+                color = (
+                    config.COLORS["obstacle"]
+                    if (x, y) in self.editor_obstacles
+                    else (17, 24, 34)
+                )
+                pygame.draw.rect(self.screen, color, rect, border_radius=2)
+                if (x, y) in self.editor_obstacles and cell_size >= 10:
+                    pygame.draw.line(self.screen, (116, 128, 145), rect.topleft, rect.bottomright, 2)
+                    pygame.draw.line(self.screen, (116, 128, 145), rect.topright, rect.bottomleft, 2)
+
+        for index, position in enumerate(self.editor_starts):
+            x, y = position
+            rect = pygame.Rect(
+                round(self.editor_grid_rect.x + x * cell_size),
+                round(self.editor_grid_rect.y + y * cell_size),
+                max(2, math.ceil(cell_size) - 1),
+                max(2, math.ceil(cell_size) - 1)
+            )
+            color_name = config.PLAYER_COLOR_OPTIONS[index]
+            pygame.draw.rect(self.screen, config.COLORS[color_name], rect, border_radius=2)
+            if cell_size >= 13:
+                number = self.small_font.render(str(index + 1), True, (255, 255, 255))
+                self.screen.blit(number, number.get_rect(center=rect.center))
+
+        side_rect = pygame.Rect(width - sidebar_width - 24, 96, sidebar_width, height - 160)
+        self.draw_glass_panel(side_rect, fill=(7, 12, 20, 226))
+        self.editor_button_rects = {}
+        button_specs = (
+            ("name", f"{self.t('editor_name')}: {self.editor_name[:15]}"),
+            ("width_down", f"− {self.t('editor_width')}"),
+            ("width_up", f"+ {self.t('editor_width')}"),
+            ("height_down", f"− {self.t('editor_height')}"),
+            ("height_up", f"+ {self.t('editor_height')}"),
+            ("save", self.t("editor_save")),
+            ("clear", self.t("editor_clear")),
+            ("back", self.t("editor_back")),
+        )
+        button_height = max(31, min(43, (side_rect.height - 64) // len(button_specs) - 5))
+        button_gap = 5
+        y = side_rect.y + 22
+        for key, label_text in button_specs:
+            rect = pygame.Rect(side_rect.x + 18, y, side_rect.width - 36, button_height)
+            self.editor_button_rects[key] = rect
+            accent = key == "save"
+            pygame.draw.rect(
+                self.screen,
+                (25, 51, 72) if accent else (16, 24, 36),
+                rect,
+                border_radius=10
+            )
+            pygame.draw.rect(
+                self.screen,
+                (83, 166, 255) if accent else (67, 81, 101),
+                rect,
+                1,
+                border_radius=10
+            )
+            label = self.small_font.render(label_text, True, (225, 231, 240))
+            self.screen.blit(label, label.get_rect(center=rect.center))
+            y += button_height + button_gap
+
+        notice = (
+            self.editor_notice
+            if pygame.time.get_ticks() < self.editor_notice_until
+            else self.t("editor_hint")
+        )
+        hint = self.small_font.render(notice, True, (165, 177, 194))
+        self.screen.blit(hint, (24, height - 51))
+        keys = self.small_font.render(self.t("editor_keys"), True, (126, 140, 159))
+        self.screen.blit(keys, (24, height - 28))
+
+        if self.editor_editing_name:
+            overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+            overlay.fill((2, 6, 12, 180))
+            self.screen.blit(overlay, (0, 0))
+            dialog = pygame.Rect(0, 0, min(560, width - 60), 230)
+            dialog.center = (width // 2, height // 2)
+            self.draw_glass_panel(dialog, fill=(7, 12, 20, 248))
+            prompt = self.menu_heading_font.render(
+                self.t("editor_name_prompt"),
+                True,
+                (248, 250, 255)
+            )
+            self.screen.blit(prompt, prompt.get_rect(center=(dialog.centerx, dialog.y + 48)))
+            field = pygame.Rect(dialog.x + 35, dialog.y + 85, dialog.width - 70, 58)
+            pygame.draw.rect(self.screen, (18, 28, 42), field, border_radius=10)
+            pygame.draw.rect(self.screen, (83, 166, 255), field, 2, border_radius=10)
+            value = self.menu_heading_font.render(self.editor_name_draft, True, (244, 247, 252))
+            self.screen.blit(value, (field.x + 15, field.centery - value.get_height() // 2))
+            name_hint = self.small_font.render(self.t("name_hint"), True, (126, 140, 159))
+            self.screen.blit(name_hint, name_hint.get_rect(center=(dialog.centerx, dialog.bottom - 39)))
+
+        pygame.display.flip()
+
     def reset_board(self) -> None:
 
         width = self.map_data["width"]
@@ -777,6 +1270,9 @@ class CubulusGame:
             ):
                 self.board[y][x] = "neutral"
 
+        for x, y in self.map_data.get("obstacles", []):
+            self.board[y][x] = "obstacle"
+
     def create_players(self) -> None:
 
         self.players = []
@@ -810,9 +1306,10 @@ class CubulusGame:
             player = Player(
                 player_id=pid,
 
-                name=config.PLAYER_NAMES.get(
-                    pid,
-                    f"Player {pid}"
+                name=(
+                    getattr(self, "player_name", config.PLAYER_NAMES[0])
+                    if pid == 0
+                    else config.PLAYER_NAMES.get(pid, f"Player {pid}")
                 ),
 
                 start_position=tuple(
@@ -838,6 +1335,28 @@ class CubulusGame:
         if current == "neutral":
 
             self.board[y][x] = player.color
+
+    def try_move_player(self, player: Player, dx: int, dy: int) -> bool:
+        """Move a player unless the destination contains an obstacle."""
+
+        if not player.alive or not self.board:
+            return False
+        grid_height = len(self.board)
+        grid_width = len(self.board[0])
+        x, y = player.position
+        destination = (
+            clamp(x + dx, 0, grid_width - 1),
+            clamp(y + dy, 0, grid_height - 1),
+        )
+        if destination == player.position:
+            return False
+        target_x, target_y = destination
+        if self.board[target_y][target_x] == "obstacle":
+            return False
+        player.position = destination
+        self.apply_tile_effect(player)
+        return True
+
     def compute_territories(
         self
     ) -> Dict[int, int]:
@@ -1174,14 +1693,36 @@ class CubulusGame:
                     self.handle_resize(event.size)
                     continue
 
+                if event.type == pygame.TEXTINPUT and self.menu_view == "name":
+                    printable = "".join(
+                        character for character in event.text
+                        if character.isprintable()
+                    )
+                    self.name_draft = (self.name_draft + printable)[:16]
+                    continue
+
                 if event.type == pygame.KEYDOWN:
 
                     if event.key == pygame.K_ESCAPE:
-                        if self.menu_view == "options":
+                        if self.menu_view in ("options", "name"):
+                            if self.menu_view == "name":
+                                pygame.key.stop_text_input()
                             self.menu_view = "main"
                             continue
                         self.running = False
                         return
+
+                    if self.menu_view == "name":
+                        if event.key == pygame.K_BACKSPACE:
+                            self.name_draft = self.name_draft[:-1]
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            self.player_name = self.sanitize_player_name(
+                                self.name_draft
+                            )
+                            pygame.key.stop_text_input()
+                            self.menu_view = "main"
+                            self.save_settings()
+                        continue
 
                     if self.menu_view == "options":
                         self.handle_options_key(event.key, "menu")
@@ -1258,6 +1799,10 @@ class CubulusGame:
         elif selected == "menu_map":
             self.cycle_map(direction)
             return
+        elif selected == "menu_difficulty":
+            self.difficulty_index = (
+                self.difficulty_index + direction
+            ) % len(config.DIFFICULTY_LEVELS)
         else:
             return
         self.save_settings()
@@ -1266,10 +1811,18 @@ class CubulusGame:
         selected = MENU_ITEMS[self.menu_selection]
         if selected == "menu_start":
             self.start_match()
-        elif selected in ("menu_mode", "menu_color", "menu_map"):
+        elif selected == "menu_player_name":
+            self.name_draft = self.player_name
+            self.menu_view = "name"
+            pygame.key.start_text_input()
+        elif selected in (
+            "menu_difficulty", "menu_mode", "menu_color", "menu_map"
+        ):
             self.cycle_menu_option(1)
         elif selected == "menu_load_map":
             self.choose_custom_map()
+        elif selected == "menu_level_editor":
+            self.start_level_editor()
         elif selected == "menu_options":
             self.options_selection = 0
             self.menu_view = "options"
@@ -1282,6 +1835,8 @@ class CubulusGame:
         self.draw_menu_background(width, height)
         if self.menu_view == "options":
             self.draw_options_panel(width, height, "menu")
+        elif self.menu_view == "name":
+            self.draw_name_panel(width, height)
         else:
             self.draw_menu_panel(width, height)
         self.draw_menu_arena_hud(width, height)
@@ -1358,7 +1913,7 @@ class CubulusGame:
 
     def draw_menu_panel(self, width: int, height: int) -> None:
         panel_width = min(520, max(390, int(width * 0.43)))
-        panel_height = min(700, max(620, height - 80))
+        panel_height = min(780, max(560, height - 40))
         panel_x = max(28, int(width * 0.055))
         panel_y = max(28, (height - panel_height) // 2)
         panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
@@ -1382,25 +1937,29 @@ class CubulusGame:
             True,
             (113, 183, 255)
         )
-        self.screen.blit(eyebrow, (panel_x + 42, panel_y + 34))
+        self.screen.blit(eyebrow, (panel_x + 42, panel_y + 24))
 
         title = self.menu_title_font.render("CUBULUS", True, (248, 250, 255))
-        self.screen.blit(title, (panel_x + 36, panel_y + 52))
+        self.screen.blit(title, (panel_x + 36, panel_y + 38))
 
         subtitle = self.small_font.render(
             self.t("menu_subtitle"),
             True,
             (165, 177, 194)
         )
-        self.screen.blit(subtitle, (panel_x + 42, panel_y + 137))
+        self.screen.blit(subtitle, (panel_x + 42, panel_y + 118))
 
-        accent_rect = pygame.Rect(panel_x + 42, panel_y + 178, 64, 4)
+        accent_rect = pygame.Rect(panel_x + 42, panel_y + 148, 64, 4)
         pygame.draw.rect(self.screen, (68, 156, 255), accent_rect, border_radius=2)
 
-        buttons_top = panel_y + 214
+        buttons_top = panel_y + 172
         button_width = panel_width - 84
-        button_height = 45
-        button_gap = 7
+        available_button_height = panel_height - 222
+        button_gap = 4
+        button_height = min(
+            43,
+            max(29, (available_button_height - button_gap * (len(MENU_ITEMS) - 1)) // len(MENU_ITEMS))
+        )
         self.menu_item_rects = []
         mode_labels = {
             "Untimed": self.t("mode_untimed"),
@@ -1446,6 +2005,32 @@ class CubulusGame:
                         (arrow_x - 5, rect.centery + 8)
                     )
                 )
+            elif item_key == "menu_player_name":
+                value_surface = self.small_font.render(
+                    self.player_name,
+                    True,
+                    (225, 231, 240)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (rect.right - value_surface.get_width() - 18, rect.centery - value_surface.get_height() // 2)
+                )
+            elif item_key == "menu_difficulty":
+                difficulty_labels = {
+                    "Easy": self.t("difficulty_easy"),
+                    "Normal": self.t("difficulty_normal"),
+                    "Hard": self.t("difficulty_hard"),
+                }
+                difficulty = config.DIFFICULTY_LEVELS[self.difficulty_index]
+                value_surface = self.small_font.render(
+                    f"‹  {difficulty_labels[difficulty]}  ›",
+                    True,
+                    (113, 183, 255)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (rect.right - value_surface.get_width() - 18, rect.centery - value_surface.get_height() // 2)
+                )
             elif item_key == "menu_mode":
                 value = mode_labels.get(
                     config.GAME_MODES[self.mode_index],
@@ -1485,7 +2070,7 @@ class CubulusGame:
                         rect.centery - value_surface.get_height() // 2
                     )
                 )
-            elif item_key in ("menu_load_map", "menu_options"):
+            elif item_key in ("menu_load_map", "menu_level_editor", "menu_options"):
                 arrow = self.menu_button_font.render(">", True, (113, 183, 255))
                 self.screen.blit(
                     arrow,
@@ -1510,6 +2095,51 @@ class CubulusGame:
         self.screen.blit(
             controls,
             (panel_x + 42, panel_y + panel_height - 48)
+        )
+
+    def draw_name_panel(self, width: int, height: int) -> None:
+        """Draw the focused player-name input on top of the menu arena."""
+
+        panel_rect = pygame.Rect(0, 0, min(560, width - 60), 270)
+        panel_rect.center = (width // 2, height // 2)
+        self.draw_glass_panel(panel_rect, fill=(7, 12, 20, 242))
+
+        title = self.title_font.render(
+            self.t("name_title"),
+            True,
+            (248, 250, 255)
+        )
+        self.screen.blit(
+            title,
+            title.get_rect(center=(panel_rect.centerx, panel_rect.y + 54))
+        )
+
+        input_rect = pygame.Rect(
+            panel_rect.x + 42,
+            panel_rect.y + 100,
+            panel_rect.width - 84,
+            62
+        )
+        pygame.draw.rect(self.screen, (18, 28, 42), input_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (83, 166, 255), input_rect, 2, border_radius=12)
+        value = self.menu_heading_font.render(
+            self.name_draft + ("|" if (pygame.time.get_ticks() // 500) % 2 == 0 else ""),
+            True,
+            (244, 247, 252)
+        )
+        self.screen.blit(
+            value,
+            (input_rect.x + 18, input_rect.centery - value.get_height() // 2)
+        )
+
+        hint = self.small_font.render(
+            self.t("name_hint"),
+            True,
+            (126, 140, 159)
+        )
+        self.screen.blit(
+            hint,
+            hint.get_rect(center=(panel_rect.centerx, panel_rect.bottom - 45))
         )
 
     def draw_menu_arena_hud(self, width: int, height: int) -> None:
@@ -1674,13 +2304,7 @@ class CubulusGame:
         if not human.alive:
             return
 
-        grid_height = len(self.board)
-        grid_width = len(self.board[0]) if grid_height else 0
-        if grid_width == 0:
-            return
-
-        human.move(dx, dy, grid_width, grid_height)
-        self.apply_tile_effect(human)
+        self.try_move_player(human, dx, dy)
 
     def update_human_auto_movement(self) -> None:
 
@@ -1753,6 +2377,10 @@ class CubulusGame:
         if not grid_width:
             return
 
+        difficulty_index = getattr(self, "difficulty_index", 1)
+        difficulty = config.DIFFICULTY_LEVELS[difficulty_index]
+        profile = config.DIFFICULTY_PROFILES[difficulty]
+
         for player in self.players[1:]:
 
             if not player.alive:
@@ -1761,28 +2389,46 @@ class CubulusGame:
             if (
                 random.random()
                 <=
-                config.BOT_MOVE_CHANCE
+                profile["bot_move_chance"]
             ):
 
-                dx, dy = random.choice(
-                    [
-                        (0, -1),
-                        (0, 1),
-                        (-1, 0),
-                        (1, 0)
-                    ]
+                dx, dy = self.choose_bot_move(
+                    player,
+                    profile["bot_chase_chance"]
                 )
+                if not self.try_move_player(player, dx, dy):
+                    alternatives = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                    random.shuffle(alternatives)
+                    for fallback_dx, fallback_dy in alternatives:
+                        if self.try_move_player(player, fallback_dx, fallback_dy):
+                            break
 
-                player.move(
-                    dx,
-                    dy,
-                    grid_width,
-                    grid_height
-                )
+    def choose_bot_move(
+        self,
+        player: Player,
+        chase_chance: float
+    ) -> Coordinate:
+        """Choose a random or human-seeking move based on difficulty."""
 
-                self.apply_tile_effect(
-                    player
-                )
+        moves = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        if not self.players or random.random() > chase_chance:
+            return random.choice(moves)
+
+        target = self.players[0]
+        delta_x = target.position[0] - player.position[0]
+        delta_y = target.position[1] - player.position[1]
+        preferred: List[Coordinate] = []
+        if delta_x:
+            preferred.append((1 if delta_x > 0 else -1, 0))
+        if delta_y:
+            preferred.append((0, 1 if delta_y > 0 else -1))
+        if not preferred:
+            return random.choice(moves)
+        preferred.sort(
+            key=lambda move: abs(delta_x) if move[0] else abs(delta_y),
+            reverse=True
+        )
+        return preferred[0]
 
     def resolve_collisions(self) -> None:
 
@@ -2121,7 +2767,9 @@ class CubulusGame:
                     config.COLORS["neutral"]
                 )
                 color = (
-                    (17, 24, 34)
+                    config.COLORS["obstacle"]
+                    if tile_color == "obstacle"
+                    else (17, 24, 34)
                     if tile_color == "neutral"
                     else tuple(
                         min(255, 18 + int(channel * 0.48))
@@ -2134,6 +2782,10 @@ class CubulusGame:
                     rect,
                     border_radius=radius
                 )
+                if tile_color == "obstacle" and rect.width >= 8:
+                    detail = (111, 124, 143)
+                    pygame.draw.line(self.screen, detail, rect.topleft, rect.bottomright, 2)
+                    pygame.draw.line(self.screen, detail, rect.topright, rect.bottomleft, 2)
 
         self.screen.set_clip(previous_clip)
 
@@ -2431,7 +3083,7 @@ class CubulusGame:
                 (content_x + 6, item_rect.y + 27),
                 6
             )
-            name = self.t("you") if player.is_human else player.name.upper()
+            name = player.name.upper()
             name_surface = self.small_font.render(
                 name,
                 True,
@@ -3168,6 +3820,10 @@ class CubulusGame:
             elif self.state == "game_over":
 
                 self.game_over_loop()
+
+            elif self.state == "editor":
+
+                self.editor_loop()
 
         self.save_settings()
         pygame.quit()
