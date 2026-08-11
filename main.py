@@ -35,6 +35,7 @@ class Player:
     lives: int = field(default_factory=lambda: config.PLAYER_LIVES)
     position: Coordinate = field(init=False)
     alive: bool = field(init=False, default=True)
+    invulnerable_until: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
         self.reset(self.start_position, self.color)
@@ -44,6 +45,7 @@ class Player:
         self.color = color
         self.lives = config.PLAYER_LIVES
         self.alive = True
+        self.invulnerable_until = 0
 
     def move(
         self,
@@ -62,14 +64,21 @@ class Player:
 
         self.position = (x, y)
 
-    def lose_life(self) -> None:
-        if not self.alive:
-            return
+    def take_damage(self, current_ticks: int) -> bool:
+        """Remove exactly one life when the damage cooldown has expired."""
 
-        self.lives -= 1
+        if not self.alive or current_ticks < self.invulnerable_until:
+            return False
 
-        if self.lives <= 0:
+        self.lives = max(0, self.lives - 1)
+        self.invulnerable_until = (
+            current_ticks + config.DAMAGE_COOLDOWN_MS
+        )
+
+        if self.lives == 0:
             self.alive = False
+
+        return True
 
 
 class CubulusGame:
@@ -110,6 +119,12 @@ class CubulusGame:
             16
         )
 
+        self.game_over_font = pygame.font.SysFont(
+            "segoeui",
+            64,
+            bold=True
+        )
+
         self.running = True
         self.state = "menu"
 
@@ -126,6 +141,9 @@ class CubulusGame:
         self.map_data = self.load_map()
 
         self.match_start_ticks: Optional[int] = None
+        self.damage_flash_until = 0
+        self.game_over_title = "SPIELENDE"
+        self.game_over_color = config.COLORS["white"]
 
         # Camera coordinates are expressed in cells. Keeping world and screen
         # units separate makes zooming smooth and leaves gameplay untouched.
@@ -380,6 +398,9 @@ class CubulusGame:
         self.camera_y = human_y + 0.5
         self.camera_zoom = config.CAMERA_START_ZOOM
         self.camera_target_zoom = config.CAMERA_START_ZOOM
+        self.damage_flash_until = 0
+        self.game_over_title = "SPIELENDE"
+        self.game_over_color = config.COLORS["white"]
 
         self.match_start_ticks = (
             pygame.time.get_ticks()
@@ -393,12 +414,16 @@ class CubulusGame:
 
     def end_match(
         self,
-        message: str
+        message: str,
+        title: str = "SPIELENDE",
+        color: Optional[Tuple[int, int, int]] = None
     ) -> None:
 
         print(message)
 
         self.status_message = message
+        self.game_over_title = title
+        self.game_over_color = color or config.COLORS["white"]
 
         self.state = "game_over"
 
@@ -732,6 +757,7 @@ class CubulusGame:
         territory_snapshot = (
             self.compute_territories()
         )
+        current_ticks = pygame.time.get_ticks()
 
         for occupants in positions.values():
 
@@ -758,12 +784,29 @@ class CubulusGame:
 
             for loser in losers:
 
-                loser.lose_life()
+                if not loser.take_damage(current_ticks):
+                    continue
+
+                if loser.is_human:
+                    self.damage_flash_until = (
+                        current_ticks + config.DAMAGE_FLASH_MS
+                    )
 
                 if not loser.alive:
 
                     self.status_message = (
                         f"{loser.name} eliminated."
+                    )
+
+                else:
+
+                    # Moving a damaged player to the spawn point prevents one
+                    # collision from draining several lives in succession.
+                    loser.position = loser.start_position
+                    self.apply_tile_effect(loser)
+                    self.status_message = (
+                        f"{loser.name} lost a life. "
+                        f"{loser.lives} remaining."
                     )
 
     def check_victory_conditions(
@@ -772,10 +815,20 @@ class CubulusGame:
 
         alive = self.alive_players()
 
+        if self.players and not self.players[0].alive:
+
+            self.end_match(
+                "Du hast alle 3 Leben verloren.",
+                title="GAME OVER",
+                color=config.COLORS["red"]
+            )
+
+            return
+
         if not alive:
 
             self.end_match(
-                "All eliminated."
+                "Alle Spieler wurden eliminiert."
             )
 
             return
@@ -789,7 +842,17 @@ class CubulusGame:
             )
 
             self.end_match(
-                message
+                message,
+                title=(
+                    "SIEG"
+                    if winner.is_human
+                    else "SPIELENDE"
+                ),
+                color=(
+                    config.COLORS["green"]
+                    if winner.is_human
+                    else config.COLORS["white"]
+                )
             )
 
             return
@@ -923,6 +986,8 @@ class CubulusGame:
 
         self.draw_players()
 
+        self.draw_damage_flash()
+
         self.draw_ui_panel()
 
         pygame.display.flip()
@@ -1016,6 +1081,13 @@ class CubulusGame:
             if not player.alive:
                 continue
 
+            current_ticks = pygame.time.get_ticks()
+            if (
+                current_ticks < player.invulnerable_until
+                and (current_ticks // 100) % 2 == 0
+            ):
+                continue
+
             color = config.COLORS.get(
                 player.color,
                 config.COLORS["white"]
@@ -1041,6 +1113,20 @@ class CubulusGame:
             )
 
         self.screen.set_clip(previous_clip)
+
+    def draw_damage_flash(self) -> None:
+
+        remaining = self.damage_flash_until - pygame.time.get_ticks()
+        if remaining <= 0:
+            return
+
+        viewport = self.board_viewport()
+        alpha = int(
+            95 * min(1.0, remaining / config.DAMAGE_FLASH_MS)
+        )
+        overlay = pygame.Surface(viewport.size, pygame.SRCALPHA)
+        overlay.fill((*config.COLORS["red"], alpha))
+        self.screen.blit(overlay, viewport.topleft)
 
     def draw_ui_panel(self) -> None:
 
@@ -1108,10 +1194,6 @@ class CubulusGame:
 
     def game_over_loop(self) -> None:
 
-        timer_start = (
-            pygame.time.get_ticks()
-        )
-
         while (
             self.state == "game_over"
             and
@@ -1134,71 +1216,69 @@ class CubulusGame:
                     self.running = False
                     return
 
+                if (
+                    event.type == pygame.KEYDOWN
+                    and
+                    event.key == pygame.K_RETURN
+                ):
+
+                    self.start_match()
+                    return
+
             self.draw_game_over()
 
             self.clock.tick(
                 config.FPS
             )
 
-            if (
-                pygame.time.get_ticks()
-                -
-                timer_start
-            ) > 3000:
-
-                self.state = "menu"
-
-                self.status_message = (
-                    "Awaiting start"
-                )
-
-                break
-
     def draw_game_over(self) -> None:
 
         self.screen.fill(
-            (10, 10, 10)
+            config.COLORS["background"]
         )
 
         width, height = self.screen.get_size()
 
-        message_surface = (
-            self.title_font.render(
-                self.status_message,
-                True,
-                config.COLORS["white"]
+        title_surface = self.game_over_font.render(
+            self.game_over_title,
+            True,
+            self.game_over_color
+        )
+
+        self.screen.blit(
+            title_surface,
+            (
+                width // 2 - title_surface.get_width() // 2,
+                height // 2 - 130
             )
         )
 
+        divider = pygame.Rect(width // 2 - 120, height // 2 - 45, 240, 3)
+        pygame.draw.rect(self.screen, self.game_over_color, divider)
+
+        message_surface = self.title_font.render(
+            self.status_message,
+            True,
+            config.COLORS["white"]
+        )
         self.screen.blit(
             message_surface,
             (
-                width // 2
-                -
-                message_surface.get_width() // 2,
-
-                height // 2
-                -
-                60
+                width // 2 - message_surface.get_width() // 2,
+                height // 2 - 10
             )
         )
 
-        hint_surface = (
-            self.primary_font.render(
-                "Returning to menu...",
-                True,
-                config.COLORS["white"]
-            )
+        hint_surface = self.primary_font.render(
+            "ENTER: Noch einmal  |  ESC: Beenden",
+            True,
+            config.COLORS["muted"]
         )
-
         self.screen.blit(
             hint_surface,
             (
-                width // 2
-                -
-                hint_surface.get_width() // 2,
-
-                height // 2
+                width // 2 - hint_surface.get_width() // 2,
+                height // 2 + 75
             )
         )
 
