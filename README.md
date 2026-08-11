@@ -24,6 +24,13 @@ the human player more consistently. God uses the Expert AI profile, but all
 bots form an alliance against the human player and do not damage one another.
 The selected difficulty is also saved automatically.
 
+Every AI opponent receives a randomly selected name at the beginning of each
+match. Names are unique within a match and are also refreshed for every round
+of the decorative AI arena in the main menu.
+
+The player color menu offers red, yellow, green, blue, purple, orange, cyan,
+pink, lime, and teal. The selected color is saved with the other settings.
+
 ## Territory mode
 
 Territory mode lets every player conquer tiles that another color has already

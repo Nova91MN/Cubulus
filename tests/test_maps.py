@@ -133,6 +133,60 @@ class TranslationTests(unittest.TestCase):
         self.assertEqual(set(TRANSLATIONS["de"]), set(TRANSLATIONS["en"]))
 
 
+class BotAndColorTests(unittest.TestCase):
+    def test_match_bots_receive_unique_random_names(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.map_data = {
+            "player_starts": [[0, 0], [3, 0], [0, 3], [3, 3]],
+        }
+        game.color_index = 0
+        game.player_name = "Nova"
+
+        with mock.patch(
+            "main.random.sample",
+            return_value=["Hans", "Ute", "Cécile"],
+        ) as sample:
+            game.create_players()
+
+        sample.assert_called_once_with(config.BOT_NAMES, 3)
+        self.assertEqual(
+            ["Nova", "Hans", "Ute", "Cécile"],
+            [player.name for player in game.players],
+        )
+
+    def test_menu_arena_refreshes_names_for_each_round(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.language = "de"
+        game.menu_round = 0
+
+        with (
+            mock.patch(
+                "main.random.sample",
+                return_value=["Jesus", "Hans", "Dieter", "Günther"],
+            ) as sample,
+            mock.patch.object(
+                sys.modules["pygame"],
+                "time",
+                types.SimpleNamespace(get_ticks=lambda: 100),
+                create=True,
+            ),
+        ):
+            game.reset_menu_battle()
+
+        sample.assert_called_once_with(config.BOT_NAMES, 4)
+        self.assertEqual(
+            ["Jesus", "Hans", "Dieter", "Günther"],
+            [player.name for player in game.menu_players],
+        )
+
+    def test_player_has_more_than_the_original_four_colors(self) -> None:
+        self.assertGreater(len(config.PLAYER_COLOR_OPTIONS), 4)
+        for color_name in config.PLAYER_COLOR_OPTIONS:
+            self.assertIn(color_name, config.COLORS)
+            self.assertIn(f"color_{color_name}", TRANSLATIONS["de"])
+            self.assertIn(f"color_{color_name}", TRANSLATIONS["en"])
+
+
 class TerritoryModeTests(unittest.TestCase):
     @staticmethod
     def make_game(difficulty: str = "Normal") -> CubulusGame:

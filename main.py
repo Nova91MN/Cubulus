@@ -90,6 +90,12 @@ TRANSLATIONS = {
         "color_yellow": "Gelb",
         "color_green": "Grün",
         "color_blue": "Blau",
+        "color_purple": "Lila",
+        "color_orange": "Orange",
+        "color_cyan": "Cyan",
+        "color_pink": "Pink",
+        "color_lime": "Limette",
+        "color_teal": "Türkis",
         "menu_tagline": "TAKTISCHER GEBIETSKAMPF",
         "menu_subtitle": "Erobere das Raster. Überlebe deine Gegner.",
         "menu_controls": "↑↓ AUSWAHL     ←→ ÄNDERN     ENTER BESTÄTIGEN",
@@ -188,6 +194,12 @@ TRANSLATIONS = {
         "color_yellow": "Yellow",
         "color_green": "Green",
         "color_blue": "Blue",
+        "color_purple": "Purple",
+        "color_orange": "Orange",
+        "color_cyan": "Cyan",
+        "color_pink": "Pink",
+        "color_lime": "Lime",
+        "color_teal": "Teal",
         "menu_tagline": "TACTICAL TERRITORY COMBAT",
         "menu_subtitle": "Claim the grid. Outlast your opponents.",
         "menu_controls": "↑↓ SELECT     ←→ CHANGE     ENTER CONFIRM",
@@ -1352,6 +1364,7 @@ class CubulusGame:
     def create_players(self) -> None:
 
         self.players = []
+        bot_names = random.sample(config.BOT_NAMES, 3)
 
         selected_color = (
             config.PLAYER_COLOR_OPTIONS[
@@ -1385,7 +1398,7 @@ class CubulusGame:
                 name=(
                     getattr(self, "player_name", config.PLAYER_NAMES[0])
                     if pid == 0
-                    else config.PLAYER_NAMES.get(pid, f"Player {pid}")
+                    else bot_names[pid - 1]
                 ),
 
                 start_position=tuple(
@@ -1597,7 +1610,7 @@ class CubulusGame:
             (3, MENU_GRID_HEIGHT - 4),
             (MENU_GRID_WIDTH - 4, MENU_GRID_HEIGHT - 4)
         )
-        names = ("NOVA", "PULSE", "BYTE", "ECHO")
+        names = random.sample(config.BOT_NAMES, len(starts))
         self.menu_players = []
 
         for player_id, (start, name, color) in enumerate(
@@ -2045,13 +2058,6 @@ class CubulusGame:
             "Timed": self.t("mode_timed"),
             "Territory": self.t("mode_territory"),
         }
-        color_labels = {
-            "red": self.t("color_red"),
-            "yellow": self.t("color_yellow"),
-            "green": self.t("color_green"),
-            "blue": self.t("color_blue")
-        }
-
         for index, item_key in enumerate(MENU_ITEMS):
             rect = pygame.Rect(
                 panel_x + 42,
@@ -2126,7 +2132,7 @@ class CubulusGame:
                 )
             elif item_key == "menu_color":
                 selected_color = config.PLAYER_COLOR_OPTIONS[self.color_index]
-                value = color_labels.get(selected_color, selected_color)
+                value = self.t(f"color_{selected_color}")
                 value_surface = self.small_font.render(f"{value}  ›", True, (225, 231, 240))
                 value_x = rect.right - value_surface.get_width() - 18
                 self.screen.blit(
