@@ -25,6 +25,17 @@ PAUSE_MENU_ITEMS = (
     "Beenden"
 )
 
+MENU_ITEMS = (
+    "Spiel starten",
+    "Spielmodus",
+    "Spielfarbe",
+    "Beenden"
+)
+
+MENU_GRID_WIDTH = 44
+MENU_GRID_HEIGHT = 30
+MENU_BOT_STEP_MS = 82
+
 
 def clamp(value: int, low: int, high: int) -> int:
     """Clamp integer between low and high inclusive."""
@@ -114,6 +125,24 @@ class CubulusGame:
             bold=True
         )
 
+        self.menu_title_font = pygame.font.SysFont(
+            "segoeui",
+            72,
+            bold=True
+        )
+
+        self.menu_heading_font = pygame.font.SysFont(
+            "segoeui",
+            22,
+            bold=True
+        )
+
+        self.menu_button_font = pygame.font.SysFont(
+            "segoeui",
+            20,
+            bold=True
+        )
+
         self.hud_font = pygame.font.SysFont(
             "segoeui",
             30,
@@ -163,6 +192,19 @@ class CubulusGame:
         self.pause_view = "main"
         self.pause_started_ticks: Optional[int] = None
         self.pause_item_rects: List[pygame.Rect] = []
+
+        self.menu_selection = 0
+        self.menu_item_rects: List[pygame.Rect] = []
+        self.menu_board: List[List[str]] = []
+        self.menu_players: List[Player] = []
+        self.menu_last_step_ticks = 0
+        self.menu_round = 0
+        self.menu_round_reset_at: Optional[int] = None
+        self.menu_battle_message = "KI-ARENA WIRD GESTARTET"
+        self.menu_battle_message_until = 0
+        self.menu_clash_position: Optional[Coordinate] = None
+        self.menu_clash_until = 0
+        self.reset_menu_battle()
 
     # ------------------------------------------------------------------
     # Utility
@@ -486,6 +528,166 @@ class CubulusGame:
         self.match_start_ticks = None
         self.pause_started_ticks = None
         self.status_message = "Awaiting start"
+        self.reset_menu_battle()
+
+    def reset_menu_battle(self) -> None:
+        """Start a fresh, self-contained AI battle behind the main menu."""
+
+        self.menu_round += 1
+        self.menu_board = [
+            ["neutral" for _ in range(MENU_GRID_WIDTH)]
+            for _ in range(MENU_GRID_HEIGHT)
+        ]
+        starts = (
+            (3, 3),
+            (MENU_GRID_WIDTH - 4, 3),
+            (3, MENU_GRID_HEIGHT - 4),
+            (MENU_GRID_WIDTH - 4, MENU_GRID_HEIGHT - 4)
+        )
+        names = ("NOVA", "PULSE", "BYTE", "ECHO")
+        self.menu_players = []
+
+        for player_id, (start, name, color) in enumerate(
+            zip(starts, names, config.PLAYER_COLOR_OPTIONS)
+        ):
+            player = Player(
+                player_id=player_id,
+                name=name,
+                start_position=start,
+                color=color,
+                is_human=False
+            )
+            # Shorter protection keeps the decorative match fast and lively.
+            player.invulnerable_until = 0
+            self.menu_players.append(player)
+            self.paint_menu_tile(player)
+
+        ticks = pygame.time.get_ticks()
+        self.menu_last_step_ticks = ticks
+        self.menu_round_reset_at = None
+        self.menu_battle_message = f"RUNDE {self.menu_round}"
+        self.menu_battle_message_until = ticks + 1250
+        self.menu_clash_position = None
+        self.menu_clash_until = 0
+
+    def paint_menu_tile(self, player: Player) -> None:
+        x, y = player.position
+        self.menu_board[y][x] = player.color
+
+    def menu_territory_counts(self) -> Dict[int, int]:
+        color_counts = {
+            color: 0 for color in config.PLAYER_COLOR_OPTIONS
+        }
+        for row in self.menu_board:
+            for color in row:
+                if color in color_counts:
+                    color_counts[color] += 1
+
+        return {
+            player.player_id: color_counts.get(player.color, 0)
+            for player in self.menu_players
+        }
+
+    def choose_menu_bot_move(self, player: Player) -> Coordinate:
+        opponents = [
+            opponent
+            for opponent in self.menu_players
+            if opponent.alive and opponent.player_id != player.player_id
+        ]
+        moves = ((0, -1), (0, 1), (-1, 0), (1, 0))
+        if not opponents:
+            return random.choice(moves)
+
+        target = min(
+            opponents,
+            key=lambda opponent: (
+                abs(opponent.position[0] - player.position[0])
+                + abs(opponent.position[1] - player.position[1])
+            )
+        )
+        delta_x = target.position[0] - player.position[0]
+        delta_y = target.position[1] - player.position[1]
+        pursuit_moves: List[Coordinate] = []
+
+        if delta_x:
+            pursuit_moves.append((1 if delta_x > 0 else -1, 0))
+        if delta_y:
+            pursuit_moves.append((0, 1 if delta_y > 0 else -1))
+
+        # Mostly pursue the closest rival, occasionally paint a side route.
+        if pursuit_moves and random.random() < 0.78:
+            return random.choice(pursuit_moves)
+        return random.choice(moves)
+
+    def update_menu_battle(self) -> None:
+        ticks = pygame.time.get_ticks()
+
+        if self.menu_round_reset_at is not None:
+            if ticks >= self.menu_round_reset_at:
+                self.reset_menu_battle()
+            return
+
+        if ticks - self.menu_last_step_ticks < MENU_BOT_STEP_MS:
+            return
+
+        self.menu_last_step_ticks = ticks
+        for player in self.menu_players:
+            if not player.alive:
+                continue
+            dx, dy = self.choose_menu_bot_move(player)
+            player.move(
+                dx,
+                dy,
+                MENU_GRID_WIDTH,
+                MENU_GRID_HEIGHT
+            )
+            self.paint_menu_tile(player)
+
+        self.resolve_menu_collisions(ticks)
+        alive = [player for player in self.menu_players if player.alive]
+        if len(alive) <= 1:
+            self.menu_battle_message = (
+                f"{alive[0].name} GEWINNT" if alive else "UNENTSCHIEDEN"
+            )
+            self.menu_battle_message_until = ticks + 1800
+            self.menu_round_reset_at = ticks + 1800
+
+    def resolve_menu_collisions(self, ticks: int) -> None:
+        positions: Dict[Coordinate, List[Player]] = {}
+        for player in self.menu_players:
+            if player.alive:
+                positions.setdefault(player.position, []).append(player)
+
+        territory = self.menu_territory_counts()
+        for position, occupants in positions.items():
+            if len(occupants) < 2:
+                continue
+
+            # Territory is the combat strength. A random tie break guarantees
+            # that visible clashes resolve instead of freezing on one cell.
+            highest = max(territory[player.player_id] for player in occupants)
+            leaders = [
+                player
+                for player in occupants
+                if territory[player.player_id] == highest
+            ]
+            winner = random.choice(leaders)
+            self.menu_clash_position = position
+            self.menu_clash_until = ticks + 360
+
+            for loser in occupants:
+                if loser is winner or not loser.take_damage(ticks):
+                    continue
+
+                self.menu_battle_message = (
+                    f"{winner.name}  VS  {loser.name}"
+                )
+                self.menu_battle_message_until = ticks + 850
+                if loser.alive:
+                    loser.position = loser.start_position
+                    # Menu battles should resume immediately after a hit.
+                    loser.invulnerable_until = ticks + 420
+                    self.paint_menu_tile(loser)
 
     # ------------------------------------------------------------------
     # Menu
@@ -498,6 +700,11 @@ class CubulusGame:
             and
             self.running
         ):
+
+            self.frame_dt = min(
+                self.clock.tick(config.FPS) / 1000.0,
+                0.05
+            )
 
             for event in pygame.event.get():
 
@@ -512,6 +719,22 @@ class CubulusGame:
 
                         self.running = False
                         return
+
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self.menu_selection = (
+                            self.menu_selection - 1
+                        ) % len(MENU_ITEMS)
+
+                    if event.key in (pygame.K_DOWN, pygame.K_s):
+                        self.menu_selection = (
+                            self.menu_selection + 1
+                        ) % len(MENU_ITEMS)
+
+                    if event.key in (pygame.K_LEFT, pygame.K_a):
+                        self.cycle_menu_option(-1)
+
+                    if event.key in (pygame.K_RIGHT, pygame.K_d):
+                        self.cycle_menu_option(1)
 
                     if event.key == pygame.K_m:
 
@@ -531,89 +754,285 @@ class CubulusGame:
 
                     if event.key == pygame.K_RETURN:
 
-                        self.start_match()
+                        self.activate_menu_item()
 
+                if event.type == pygame.MOUSEMOTION:
+                    for index, rect in enumerate(self.menu_item_rects):
+                        if rect.collidepoint(event.pos):
+                            self.menu_selection = index
+                            break
+
+                if (
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
+                ):
+                    for index, rect in enumerate(self.menu_item_rects):
+                        if rect.collidepoint(event.pos):
+                            self.menu_selection = index
+                            self.activate_menu_item()
+                            break
+
+            self.update_menu_battle()
             self.draw_menu()
 
-            self.clock.tick(
-                config.FPS
-            )
+    def cycle_menu_option(self, direction: int) -> None:
+        if self.menu_selection == 1:
+            self.mode_index = (
+                self.mode_index + direction
+            ) % len(config.GAME_MODES)
+        elif self.menu_selection == 2:
+            self.color_index = (
+                self.color_index + direction
+            ) % len(config.PLAYER_COLOR_OPTIONS)
+
+    def activate_menu_item(self) -> None:
+        if self.menu_selection == 0:
+            self.start_match()
+        elif self.menu_selection in (1, 2):
+            self.cycle_menu_option(1)
+        elif self.menu_selection == 3:
+            self.running = False
 
     def draw_menu(self) -> None:
-
-        self.screen.fill(
-            config.COLORS["background"]
-        )
-
         width, height = self.screen.get_size()
 
-        title = self.title_font.render(
-            "Cubulus v0.0.4 Demo",
-            True,
-            config.COLORS["white"]
-        )
-
-        self.screen.blit(
-            title,
-            (
-                width // 2
-                - title.get_width() // 2,
-                height // 2 - 170
-            )
-        )
-
-        mode_text = (
-            f"Modus (M): "
-            f"{config.GAME_MODES[self.mode_index]}"
-        )
-
-        color_text = (
-            f"Farbe (C): "
-            f"{config.PLAYER_COLOR_OPTIONS[self.color_index]}"
-        )
-
-        hint_text = (
-            "ENTER: Starten  |  ESC: Beenden"
-        )
-
-        self.screen.blit(
-            self.primary_font.render(
-                mode_text,
-                True,
-                config.COLORS["white"]
-            ),
-            (width // 2 - 170, height // 2 - 50)
-        )
-
-        self.screen.blit(
-            self.primary_font.render(
-                color_text,
-                True,
-                config.COLORS["white"]
-            ),
-            (width // 2 - 170, height // 2 - 10)
-        )
-
-        self.screen.blit(
-            self.primary_font.render(
-                hint_text,
-                True,
-                config.COLORS["white"]
-            ),
-            (width // 2 - 170, height // 2 + 50)
-        )
-
-        zoom_hint = self.small_font.render(
-            "Im Spiel: Mausrad oder +/- zum Zoomen, 0 zum Zurücksetzen",
-            True,
-            config.COLORS["muted"]
-        )
-        self.screen.blit(
-            zoom_hint,
-            (width // 2 - zoom_hint.get_width() // 2, height - 70)
-        )
+        self.draw_menu_background(width, height)
+        self.draw_menu_panel(width, height)
+        self.draw_menu_arena_hud(width, height)
 
         pygame.display.flip()
+
+    def draw_menu_background(self, width: int, height: int) -> None:
+        self.screen.fill((6, 9, 15))
+        cell_size = max(
+            width / MENU_GRID_WIDTH,
+            height / MENU_GRID_HEIGHT
+        )
+        origin_x = (width - MENU_GRID_WIDTH * cell_size) / 2
+        origin_y = (height - MENU_GRID_HEIGHT * cell_size) / 2
+        neutral_color = (17, 24, 34)
+
+        for y, row in enumerate(self.menu_board):
+            for x, tile_color in enumerate(row):
+                base_color = config.COLORS.get(tile_color, neutral_color)
+                color = (
+                    neutral_color
+                    if tile_color == "neutral"
+                    else tuple(min(255, 18 + int(channel * 0.48)) for channel in base_color)
+                )
+                rect = pygame.Rect(
+                    round(origin_x + x * cell_size),
+                    round(origin_y + y * cell_size),
+                    max(1, math.ceil(cell_size) - 1),
+                    max(1, math.ceil(cell_size) - 1)
+                )
+                pygame.draw.rect(self.screen, color, rect, border_radius=2)
+
+        ticks = pygame.time.get_ticks()
+        for player in self.menu_players:
+            if not player.alive:
+                continue
+            center = (
+                round(origin_x + (player.position[0] + 0.5) * cell_size),
+                round(origin_y + (player.position[1] + 0.5) * cell_size)
+            )
+            color = config.COLORS[player.color]
+            pygame.draw.circle(
+                self.screen,
+                (*color, 45),
+                center,
+                max(8, round(cell_size * 0.9))
+            )
+            bot_rect = pygame.Rect(0, 0, max(9, int(cell_size * 0.7)), max(9, int(cell_size * 0.7)))
+            bot_rect.center = center
+            pygame.draw.rect(self.screen, color, bot_rect, border_radius=3)
+            pygame.draw.rect(self.screen, (255, 255, 255), bot_rect, 2, border_radius=3)
+
+        if self.menu_clash_position and ticks < self.menu_clash_until:
+            progress = (self.menu_clash_until - ticks) / 360.0
+            center = (
+                round(origin_x + (self.menu_clash_position[0] + 0.5) * cell_size),
+                round(origin_y + (self.menu_clash_position[1] + 0.5) * cell_size)
+            )
+            pygame.draw.circle(
+                self.screen,
+                (255, 255, 255),
+                center,
+                max(8, round(cell_size * (1.5 - progress))),
+                max(1, round(3 * progress))
+            )
+
+        # A dark veil keeps the moving arena atmospheric and the menu legible.
+        veil = pygame.Surface((width, height), pygame.SRCALPHA)
+        veil.fill((3, 7, 13, 92))
+        for band in range(8):
+            band_rect = pygame.Rect(0, band * height // 8, width, height // 8 + 1)
+            pygame.draw.rect(veil, (2, 5, 10, 8 + band * 5), band_rect)
+        self.screen.blit(veil, (0, 0))
+
+    def draw_menu_panel(self, width: int, height: int) -> None:
+        panel_width = min(520, max(390, int(width * 0.43)))
+        panel_height = min(700, max(620, height - 80))
+        panel_x = max(28, int(width * 0.055))
+        panel_y = max(28, (height - panel_height) // 2)
+        panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(
+            panel,
+            (9, 14, 23, 232),
+            panel.get_rect(),
+            border_radius=24
+        )
+        pygame.draw.rect(
+            panel,
+            (89, 111, 142, 105),
+            panel.get_rect(),
+            1,
+            border_radius=24
+        )
+        self.screen.blit(panel, (panel_x, panel_y))
+
+        eyebrow = self.small_font.render(
+            "TACTICAL TERRITORY COMBAT",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(eyebrow, (panel_x + 42, panel_y + 34))
+
+        title = self.menu_title_font.render("CUBULUS", True, (248, 250, 255))
+        self.screen.blit(title, (panel_x + 36, panel_y + 52))
+
+        subtitle = self.small_font.render(
+            "Erobere das Raster. Überlebe deine Gegner.",
+            True,
+            (165, 177, 194)
+        )
+        self.screen.blit(subtitle, (panel_x + 42, panel_y + 137))
+
+        accent_rect = pygame.Rect(panel_x + 42, panel_y + 178, 64, 4)
+        pygame.draw.rect(self.screen, (68, 156, 255), accent_rect, border_radius=2)
+
+        buttons_top = panel_y + 214
+        button_width = panel_width - 84
+        button_height = 62
+        button_gap = 13
+        self.menu_item_rects = []
+        mode_labels = {"Untimed": "Endlos", "Timed": "10 Minuten"}
+        color_labels = {
+            "red": "Rot",
+            "yellow": "Gelb",
+            "green": "Grün",
+            "blue": "Blau"
+        }
+
+        for index, item in enumerate(MENU_ITEMS):
+            rect = pygame.Rect(
+                panel_x + 42,
+                buttons_top + index * (button_height + button_gap),
+                button_width,
+                button_height
+            )
+            self.menu_item_rects.append(rect)
+            selected = index == self.menu_selection
+            fill = (25, 38, 55, 245) if selected else (16, 24, 36, 218)
+            border = (83, 166, 255) if selected else (67, 81, 101)
+            pygame.draw.rect(self.screen, fill, rect, border_radius=12)
+            pygame.draw.rect(self.screen, border, rect, 2 if selected else 1, border_radius=12)
+
+            label_color = (255, 255, 255) if selected else (202, 211, 224)
+            label = self.menu_button_font.render(item, True, label_color)
+            self.screen.blit(label, (rect.x + 20, rect.centery - label.get_height() // 2))
+
+            if index == 0:
+                arrow_x = rect.right - 31
+                pygame.draw.polygon(
+                    self.screen,
+                    (103, 192, 255),
+                    (
+                        (arrow_x - 5, rect.centery - 8),
+                        (arrow_x + 6, rect.centery),
+                        (arrow_x - 5, rect.centery + 8)
+                    )
+                )
+            elif index == 1:
+                value = mode_labels.get(
+                    config.GAME_MODES[self.mode_index],
+                    config.GAME_MODES[self.mode_index]
+                )
+                value_surface = self.small_font.render(f"‹  {value}  ›", True, (113, 183, 255))
+                self.screen.blit(
+                    value_surface,
+                    (rect.right - value_surface.get_width() - 18, rect.centery - value_surface.get_height() // 2)
+                )
+            elif index == 2:
+                selected_color = config.PLAYER_COLOR_OPTIONS[self.color_index]
+                value = color_labels.get(selected_color, selected_color)
+                value_surface = self.small_font.render(f"{value}  ›", True, (225, 231, 240))
+                value_x = rect.right - value_surface.get_width() - 18
+                self.screen.blit(
+                    value_surface,
+                    (value_x, rect.centery - value_surface.get_height() // 2)
+                )
+                pygame.draw.circle(
+                    self.screen,
+                    config.COLORS[selected_color],
+                    (value_x - 17, rect.centery),
+                    7
+                )
+
+        controls = self.small_font.render(
+            "↑↓ AUSWAHL     ←→ ÄNDERN     ENTER BESTÄTIGEN",
+            True,
+            (126, 140, 159)
+        )
+        self.screen.blit(
+            controls,
+            (panel_x + 42, panel_y + panel_height - 48)
+        )
+
+    def draw_menu_arena_hud(self, width: int, height: int) -> None:
+        if width < 860:
+            return
+
+        hud_width = min(330, width - 610)
+        hud_rect = pygame.Rect(width - hud_width - 42, 42, hud_width, 238)
+        hud = pygame.Surface(hud_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(hud, (7, 12, 20, 205), hud.get_rect(), border_radius=18)
+        pygame.draw.rect(hud, (75, 94, 119, 120), hud.get_rect(), 1, border_radius=18)
+        self.screen.blit(hud, hud_rect.topleft)
+
+        live_dot = (hud_rect.x + 25, hud_rect.y + 29)
+        pygame.draw.circle(self.screen, (255, 73, 88), live_dot, 5)
+        live_label = self.menu_heading_font.render("LIVE  KI-ARENA", True, (244, 247, 252))
+        self.screen.blit(live_label, (hud_rect.x + 40, hud_rect.y + 15))
+
+        territory = self.menu_territory_counts()
+        for index, player in enumerate(self.menu_players):
+            row_y = hud_rect.y + 68 + index * 36
+            color = config.COLORS[player.color]
+            pygame.draw.circle(self.screen, color, (hud_rect.x + 27, row_y + 9), 6)
+            name_color = (213, 220, 230) if player.alive else (91, 101, 115)
+            name = self.small_font.render(player.name, True, name_color)
+            self.screen.blit(name, (hud_rect.x + 42, row_y))
+            score = self.small_font.render(
+                f"{territory.get(player.player_id, 0):03d}  "
+                + "●" * player.lives
+                + "○" * (config.PLAYER_LIVES - player.lives),
+                True,
+                name_color
+            )
+            self.screen.blit(score, (hud_rect.right - score.get_width() - 18, row_y))
+
+        ticks = pygame.time.get_ticks()
+        if ticks < self.menu_battle_message_until:
+            message = self.small_font.render(
+                self.menu_battle_message,
+                True,
+                (126, 199, 255)
+            )
+            message_rect = message.get_rect(
+                center=(hud_rect.centerx, hud_rect.bottom - 22)
+            )
+            self.screen.blit(message, message_rect)
 
     # ------------------------------------------------------------------
     # Gameplay
