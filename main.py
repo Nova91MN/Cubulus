@@ -139,7 +139,7 @@ TRANSLATIONS = {
         "mode": "MODUS",
         "lives": "LEBEN",
         "pause_hint": "W/S AUSWAHL   ENTER BESTÄTIGEN   ESC FORTSETZEN",
-        "again_hint": "ENTER: Noch einmal  |  ESC: Beenden",
+        "again_hint": "ENTER: Noch einmal  |  ESC: Hauptmenü",
         "name_title": "SPIELERNAME",
         "name_hint": "Namen eingeben   ENTER SPEICHERN   ESC ABBRECHEN",
         "editor_title": "LEVEL-EDITOR",
@@ -243,7 +243,7 @@ TRANSLATIONS = {
         "mode": "MODE",
         "lives": "LIVES",
         "pause_hint": "W/S SELECT   ENTER CONFIRM   ESC CONTINUE",
-        "again_hint": "ENTER: Play again  |  ESC: Quit",
+        "again_hint": "ENTER: Play again  |  ESC: Main menu",
         "name_title": "PLAYER NAME",
         "name_hint": "Type a name   ENTER SAVE   ESC CANCEL",
         "editor_title": "LEVEL EDITOR",
@@ -3918,7 +3918,7 @@ class CubulusGame:
                     event.key == pygame.K_ESCAPE
                 ):
 
-                    self.running = False
+                    self.return_to_main_menu()
                     return
 
                 if (

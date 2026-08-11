@@ -133,6 +133,42 @@ class TranslationTests(unittest.TestCase):
         self.assertEqual(set(TRANSLATIONS["de"]), set(TRANSLATIONS["en"]))
 
 
+class GameOverTests(unittest.TestCase):
+    def test_escape_returns_to_main_menu(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.state = "game_over"
+        game.running = True
+
+        keydown = object()
+        escape = object()
+        event = types.SimpleNamespace(type=keydown, key=escape)
+
+        def return_to_main_menu() -> None:
+            game.state = "menu"
+
+        game.return_to_main_menu = mock.Mock(side_effect=return_to_main_menu)
+
+        with (
+            mock.patch.object(sys.modules["pygame"], "QUIT", object(), create=True),
+            mock.patch.object(
+                sys.modules["pygame"], "VIDEORESIZE", object(), create=True
+            ),
+            mock.patch.object(sys.modules["pygame"], "KEYDOWN", keydown, create=True),
+            mock.patch.object(sys.modules["pygame"], "K_ESCAPE", escape, create=True),
+            mock.patch.object(
+                sys.modules["pygame"],
+                "event",
+                types.SimpleNamespace(get=lambda: [event]),
+                create=True,
+            ),
+        ):
+            game.game_over_loop()
+
+        game.return_to_main_menu.assert_called_once_with()
+        self.assertTrue(game.running)
+        self.assertEqual("menu", game.state)
+
+
 class BotAndColorTests(unittest.TestCase):
     def test_match_bots_receive_unique_random_names(self) -> None:
         game = CubulusGame.__new__(CubulusGame)

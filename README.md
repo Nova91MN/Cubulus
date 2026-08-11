@@ -123,7 +123,8 @@ main menu, with the board continuing behind the floating HUD.
 
 A collision with a stronger opponent costs one life. After taking damage, the
 player briefly becomes invulnerable and returns to the spawn point. Losing all
-three lives opens the Game Over screen; press `Enter` there to start again.
+three lives opens the Game Over screen; press `Enter` there to start again or
+`Esc` to return to the main menu.
 
 Automatic movement is enabled by default and can be switched on or off from
 the Options screen in either the main menu or pause menu. When it is disabled,
