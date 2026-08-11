@@ -1,14 +1,25 @@
-"""
-Configuration module for Cubulus v0.0.0 Demo.
-"""
+"""Configuration for the Cubulus demo."""
 
 # Display settings
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 800
+WINDOW_WIDTH = 1200
+WINDOW_HEIGHT = 900
 GRID_WIDTH = 100
 GRID_HEIGHT = 100
-CELL_SIZE = WINDOW_WIDTH // GRID_WIDTH
-FPS = 30
+CELL_SIZE = 8
+FPS = 60
+
+# Camera settings.  CELL_SIZE is the world-space base size of a tile; the
+# displayed size is CELL_SIZE * zoom.
+CAMERA_START_ZOOM = 3.0
+CAMERA_MIN_ZOOM = 1.25
+CAMERA_MAX_ZOOM = 5.0
+CAMERA_ZOOM_STEP = 0.35
+CAMERA_FOLLOW_SPEED = 7.5
+CAMERA_ZOOM_SPEED = 9.0
+
+# Fixed screen-space UI areas (the camera only draws between these bars).
+TOP_HUD_HEIGHT = 92
+BOTTOM_HUD_HEIGHT = 72
 
 # Game settings
 PLAYER_LIVES = 3
@@ -17,20 +28,24 @@ TIMED_MODE_SECONDS = 600
 
 # Colors used in the game
 COLORS = {
-    "neutral": (30, 30, 30),
-    "red": (220, 53, 69),
-    "yellow": (255, 193, 7),
-    "green": (40, 167, 69),
-    "blue": (0, 123, 255),
-    "white": (245, 245, 245),
+    "background": (0, 0, 0),
+    "neutral": (202, 202, 202),
+    "grid": (8, 8, 8),
+    "panel": (49, 49, 49),
+    "red": (211, 0, 0),
+    "yellow": (255, 205, 0),
+    "green": (0, 166, 81),
+    "blue": (0, 112, 221),
+    "white": (248, 248, 248),
+    "muted": (178, 178, 178),
 }
 
 # Player configuration
 PLAYER_STARTS = {
-    0: (5, 5),
-    1: (94, 5),
-    2: (5, 94),
-    3: (94, 94),
+    0: (0, 0),
+    1: (99, 0),
+    2: (0, 99),
+    3: (99, 99),
 }
 
 PLAYER_NAMES = {

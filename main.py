@@ -1,11 +1,12 @@
 import json
+import math
 import random
 import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-print("Cubulus v0.0.0 Demo – Python build")
+print("Cubulus v0.0.4 Demo - Python build")
 
 try:
     import pygame
@@ -79,10 +80,11 @@ class CubulusGame:
             (
                 config.WINDOW_WIDTH,
                 config.WINDOW_HEIGHT
-            )
+            ),
+            pygame.RESIZABLE
         )
 
-        pygame.display.set_caption("Cubulus v0.0.0 Demo")
+        pygame.display.set_caption("Cubulus v0.0.4 Demo")
 
         self.clock = pygame.time.Clock()
 
@@ -92,9 +94,20 @@ class CubulusGame:
         )
 
         self.title_font = pygame.font.SysFont(
-            "consolas",
-            28,
+            "segoeui",
+            30,
             bold=True
+        )
+
+        self.hud_font = pygame.font.SysFont(
+            "segoeui",
+            30,
+            bold=True
+        )
+
+        self.small_font = pygame.font.SysFont(
+            "segoeui",
+            16
         )
 
         self.running = True
@@ -113,6 +126,14 @@ class CubulusGame:
         self.map_data = self.load_map()
 
         self.match_start_ticks: Optional[int] = None
+
+        # Camera coordinates are expressed in cells. Keeping world and screen
+        # units separate makes zooming smooth and leaves gameplay untouched.
+        self.camera_x = 0.5
+        self.camera_y = 0.5
+        self.camera_zoom = config.CAMERA_START_ZOOM
+        self.camera_target_zoom = config.CAMERA_START_ZOOM
+        self.frame_dt = 1.0 / config.FPS
 
     # ------------------------------------------------------------------
     # Utility
@@ -352,6 +373,14 @@ class CubulusGame:
         for player in self.players:
             self.apply_tile_effect(player)
 
+        self.territory_counts = self.compute_territories()
+
+        human_x, human_y = self.players[0].position
+        self.camera_x = human_x + 0.5
+        self.camera_y = human_y + 0.5
+        self.camera_zoom = config.CAMERA_START_ZOOM
+        self.camera_target_zoom = config.CAMERA_START_ZOOM
+
         self.match_start_ticks = (
             pygame.time.get_ticks()
         )
@@ -430,11 +459,13 @@ class CubulusGame:
     def draw_menu(self) -> None:
 
         self.screen.fill(
-            (12, 12, 12)
+            config.COLORS["background"]
         )
 
+        width, height = self.screen.get_size()
+
         title = self.title_font.render(
-            "Cubulus v0.0.0 Demo",
+            "Cubulus v0.0.4 Demo",
             True,
             config.COLORS["white"]
         )
@@ -442,25 +473,24 @@ class CubulusGame:
         self.screen.blit(
             title,
             (
-                config.WINDOW_WIDTH // 2
+                width // 2
                 - title.get_width() // 2,
-                120
+                height // 2 - 170
             )
         )
 
         mode_text = (
-            f"Mode (M): "
+            f"Modus (M): "
             f"{config.GAME_MODES[self.mode_index]}"
         )
 
         color_text = (
-            f"Color (C): "
+            f"Farbe (C): "
             f"{config.PLAYER_COLOR_OPTIONS[self.color_index]}"
         )
 
         hint_text = (
-            "Press ENTER to start, "
-            "ESC to quit"
+            "ENTER: Starten  |  ESC: Beenden"
         )
 
         self.screen.blit(
@@ -469,7 +499,7 @@ class CubulusGame:
                 True,
                 config.COLORS["white"]
             ),
-            (240, 260)
+            (width // 2 - 170, height // 2 - 50)
         )
 
         self.screen.blit(
@@ -478,7 +508,7 @@ class CubulusGame:
                 True,
                 config.COLORS["white"]
             ),
-            (240, 300)
+            (width // 2 - 170, height // 2 - 10)
         )
 
         self.screen.blit(
@@ -487,7 +517,17 @@ class CubulusGame:
                 True,
                 config.COLORS["white"]
             ),
-            (240, 340)
+            (width // 2 - 170, height // 2 + 50)
+        )
+
+        zoom_hint = self.small_font.render(
+            "Im Spiel: Mausrad oder +/- zum Zoomen, 0 zum Zurücksetzen",
+            True,
+            config.COLORS["muted"]
+        )
+        self.screen.blit(
+            zoom_hint,
+            (width // 2 - zoom_hint.get_width() // 2, height - 70)
         )
 
         pygame.display.flip()
@@ -504,15 +544,16 @@ class CubulusGame:
             self.running
         ):
 
+            self.frame_dt = min(
+                self.clock.tick(config.FPS) / 1000.0,
+                0.05
+            )
+
             self.handle_game_events()
 
             self.update_game_state()
 
             self.draw_gameplay()
-
-            self.clock.tick(
-                config.FPS
-            )
 
     def handle_game_events(self) -> None:
 
@@ -533,6 +574,18 @@ class CubulusGame:
                 return
 
             if event.type == pygame.KEYDOWN:
+
+                if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                    self.change_zoom(config.CAMERA_ZOOM_STEP)
+                    continue
+
+                if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                    self.change_zoom(-config.CAMERA_ZOOM_STEP)
+                    continue
+
+                if event.key in (pygame.K_0, pygame.K_KP0):
+                    self.camera_target_zoom = config.CAMERA_START_ZOOM
+                    continue
 
                 human = self.players[0]
 
@@ -568,6 +621,43 @@ class CubulusGame:
                         human
                     )
 
+            if event.type == pygame.MOUSEWHEEL:
+                self.change_zoom(
+                    event.y * config.CAMERA_ZOOM_STEP
+                )
+
+    def change_zoom(self, amount: float) -> None:
+
+        self.camera_target_zoom = max(
+            config.CAMERA_MIN_ZOOM,
+            min(
+                config.CAMERA_MAX_ZOOM,
+                self.camera_target_zoom + amount
+            )
+        )
+
+    def update_camera(self) -> None:
+
+        if not self.players:
+            return
+
+        human = self.players[0]
+        target_x = human.position[0] + 0.5
+        target_y = human.position[1] + 0.5
+
+        follow_blend = 1.0 - math.exp(
+            -config.CAMERA_FOLLOW_SPEED * self.frame_dt
+        )
+        zoom_blend = 1.0 - math.exp(
+            -config.CAMERA_ZOOM_SPEED * self.frame_dt
+        )
+
+        self.camera_x += (target_x - self.camera_x) * follow_blend
+        self.camera_y += (target_y - self.camera_y) * follow_blend
+        self.camera_zoom += (
+            self.camera_target_zoom - self.camera_zoom
+        ) * zoom_blend
+
     def update_game_state(self) -> None:
 
         if not self.running:
@@ -576,6 +666,8 @@ class CubulusGame:
         self.update_bots()
 
         self.resolve_collisions()
+
+        self.update_camera()
 
         self.territory_counts = (
             self.compute_territories()
@@ -824,7 +916,7 @@ class CubulusGame:
     def draw_gameplay(self) -> None:
 
         self.screen.fill(
-            config.COLORS["neutral"]
+            config.COLORS["background"]
         )
 
         self.draw_board()
@@ -837,37 +929,87 @@ class CubulusGame:
 
     def draw_board(self) -> None:
 
-        cell_size = config.CELL_SIZE
+        if not self.board:
+            return
 
-        for y, row in enumerate(
-            self.board
-        ):
+        viewport = self.board_viewport()
+        cell_size = config.CELL_SIZE * self.camera_zoom
+        origin_x = viewport.centerx - self.camera_x * cell_size
+        origin_y = viewport.centery - self.camera_y * cell_size
 
-            for x, color_name in enumerate(
-                row
-            ):
+        board_height = len(self.board)
+        board_width = len(self.board[0])
 
-                color = config.COLORS.get(
-                    color_name,
-                    config.COLORS["neutral"]
-                )
+        first_x = max(0, int(math.floor((viewport.left - origin_x) / cell_size)))
+        first_y = max(0, int(math.floor((viewport.top - origin_y) / cell_size)))
+        last_x = min(board_width, int(math.ceil((viewport.right - origin_x) / cell_size)))
+        last_y = min(board_height, int(math.ceil((viewport.bottom - origin_y) / cell_size)))
+        gap = max(1, int(round(cell_size * 0.09)))
+
+        previous_clip = self.screen.get_clip()
+        self.screen.set_clip(viewport)
+
+        for y in range(first_y, last_y):
+            row = self.board[y]
+
+            for x in range(first_x, last_x):
+                left = round(origin_x + x * cell_size)
+                top = round(origin_y + y * cell_size)
+                right = round(origin_x + (x + 1) * cell_size)
+                bottom = round(origin_y + (y + 1) * cell_size)
 
                 rect = pygame.Rect(
-                    x * cell_size,
-                    y * cell_size,
-                    cell_size,
-                    cell_size
+                    left,
+                    top,
+                    max(1, right - left - gap),
+                    max(1, bottom - top - gap)
                 )
+                color = config.COLORS.get(
+                    row[x],
+                    config.COLORS["neutral"]
+                )
+                pygame.draw.rect(self.screen, color, rect)
 
-                pygame.draw.rect(
-                    self.screen,
-                    color,
-                    rect
-                )
+        self.screen.set_clip(previous_clip)
+
+    def board_viewport(self) -> pygame.Rect:
+
+        width, height = self.screen.get_size()
+        return pygame.Rect(
+            0,
+            config.TOP_HUD_HEIGHT,
+            width,
+            max(
+                1,
+                height - config.TOP_HUD_HEIGHT - config.BOTTOM_HUD_HEIGHT
+            )
+        )
+
+    def cell_screen_rect(self, x: int, y: int) -> pygame.Rect:
+
+        viewport = self.board_viewport()
+        cell_size = config.CELL_SIZE * self.camera_zoom
+        origin_x = viewport.centerx - self.camera_x * cell_size
+        origin_y = viewport.centery - self.camera_y * cell_size
+        gap = max(1, int(round(cell_size * 0.09)))
+
+        left = round(origin_x + x * cell_size)
+        top = round(origin_y + y * cell_size)
+        right = round(origin_x + (x + 1) * cell_size)
+        bottom = round(origin_y + (y + 1) * cell_size)
+
+        return pygame.Rect(
+            left,
+            top,
+            max(1, right - left - gap),
+            max(1, bottom - top - gap)
+        )
 
     def draw_players(self) -> None:
 
-        cell_size = config.CELL_SIZE
+        viewport = self.board_viewport()
+        previous_clip = self.screen.get_clip()
+        self.screen.set_clip(viewport)
 
         for player in self.players:
 
@@ -879,14 +1021,10 @@ class CubulusGame:
                 config.COLORS["white"]
             )
 
-            x, y = player.position
+            rect = self.cell_screen_rect(*player.position)
 
-            rect = pygame.Rect(
-                x * cell_size,
-                y * cell_size,
-                cell_size,
-                cell_size
-            )
+            if not rect.colliderect(viewport):
+                continue
 
             pygame.draw.rect(
                 self.screen,
@@ -894,130 +1032,75 @@ class CubulusGame:
                 rect
             )
 
-            self.draw_hp_indicator(
-                player,
-                rect
-            )
-
-    def draw_hp_indicator(
-        self,
-        player: Player,
-        rect: pygame.Rect
-    ) -> None:
-
-        max_lives = (
-            config.PLAYER_LIVES
-        )
-
-        segment_width = (
-            rect.width
-            /
-            max_lives
-        )
-
-        y = rect.top - 6
-
-        if y < 2:
-            y = rect.bottom + 2
-
-        for i in range(max_lives):
-
-            life_color = (
-                config.COLORS["white"]
-                if i < player.lives
-                else
-                (80, 80, 80)
-            )
-
-            indicator_rect = pygame.Rect(
-                rect.left
-                + i * segment_width,
-
-                y,
-
-                segment_width - 1,
-
-                4
-            )
-
+            border_width = max(1, min(3, rect.width // 6))
             pygame.draw.rect(
                 self.screen,
-                life_color,
-                indicator_rect
+                config.COLORS["white"],
+                rect,
+                border_width
             )
+
+        self.screen.set_clip(previous_clip)
 
     def draw_ui_panel(self) -> None:
 
-        lines: List[str] = []
+        width, height = self.screen.get_size()
+        human_lives = self.players[0].lives if self.players else 0
 
-        lines.append(
-            f"Mode: "
-            f"{config.GAME_MODES[self.mode_index]}"
+        lives_surface = self.hud_font.render(
+            f"Leben: {human_lives}",
+            True,
+            config.COLORS["white"]
         )
-
-        remaining = (
-            self.remaining_time()
+        shadow_surface = self.hud_font.render(
+            f"Leben: {human_lives}",
+            True,
+            (65, 65, 65)
         )
+        self.screen.blit(shadow_surface, (14, 15))
+        self.screen.blit(lives_surface, (12, 13))
 
+        remaining = self.remaining_time()
         if remaining is not None:
-
-            lines.append(
-                f"Time: {remaining}s"
+            timer = self.hud_font.render(
+                f"Zeit: {remaining}s",
+                True,
+                config.COLORS["white"]
             )
+            self.screen.blit(timer, (width - timer.get_width() - 14, 13))
 
-        lines.append(
-            f"Status: "
-            f"{self.status_message}"
+        panel_rect = pygame.Rect(
+            0,
+            height - config.BOTTOM_HUD_HEIGHT,
+            width,
+            config.BOTTOM_HUD_HEIGHT
         )
+        pygame.draw.rect(self.screen, config.COLORS["panel"], panel_rect)
 
-        lines.append(
-            "Players:"
+        color_labels = (
+            ("Rot", "red"),
+            ("Gelb", "yellow"),
+            ("Grün", "green"),
+            ("Blau", "blue")
         )
-
-        for player in self.players:
-
-            territory = (
-                self.territory_counts.get(
-                    player.player_id,
-                    0
-                )
-            )
-
-            state = (
-                "Alive"
-                if player.alive
-                else "KO"
-            )
-
-            lines.append(
-                f"  {player.name} "
-                f"({player.color}) - "
-                f"{state}, "
-                f"HP:{player.lives}, "
-                f"Tiles:{territory}"
-            )
-
-        y = 6
-
-        for line in lines:
-
-            surface = (
-                self.primary_font.render(
-                    line,
-                    True,
-                    config.COLORS["white"]
-                )
-            )
-
-            self.screen.blit(
-                surface,
-                (8, y)
-            )
-
-            y += (
-                surface.get_height()
-                + 2
-            )
+        counts_by_color = {
+            player.color: self.territory_counts.get(player.player_id, 0)
+            for player in self.players
+        }
+        territory_text = "Gebiete - " + " | ".join(
+            f"{label}: {counts_by_color.get(color, 0)}"
+            for label, color in color_labels
+        )
+        territory_surface = self.hud_font.render(
+            territory_text,
+            True,
+            config.COLORS["white"]
+        )
+        text_position = (
+            width // 2 - territory_surface.get_width() // 2,
+            panel_rect.centery - territory_surface.get_height() // 2 - 2
+        )
+        self.screen.blit(territory_surface, text_position)
 
     # ------------------------------------------------------------------
     # Game Over
@@ -1077,6 +1160,8 @@ class CubulusGame:
             (10, 10, 10)
         )
 
+        width, height = self.screen.get_size()
+
         message_surface = (
             self.title_font.render(
                 self.status_message,
@@ -1088,11 +1173,11 @@ class CubulusGame:
         self.screen.blit(
             message_surface,
             (
-                config.WINDOW_WIDTH // 2
+                width // 2
                 -
                 message_surface.get_width() // 2,
 
-                config.WINDOW_HEIGHT // 2
+                height // 2
                 -
                 60
             )
@@ -1109,11 +1194,11 @@ class CubulusGame:
         self.screen.blit(
             hint_surface,
             (
-                config.WINDOW_WIDTH // 2
+                width // 2
                 -
                 hint_surface.get_width() // 2,
 
-                config.WINDOW_HEIGHT // 2
+                height // 2
             )
         )
 
