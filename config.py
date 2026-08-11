@@ -7,6 +7,16 @@ GRID_WIDTH = 100
 GRID_HEIGHT = 100
 CELL_SIZE = 8
 FPS = 60
+RESOLUTION_OPTIONS = (
+    (960, 720),
+    (1200, 900),
+    (1280, 720),
+    (1600, 900),
+    (1920, 1080),
+)
+
+# The selected multiplier only affects gameplay while debug mode is enabled.
+DEBUG_SPEED_OPTIONS = (0.25, 0.5, 1.0, 2.0, 4.0)
 
 # Camera settings.  CELL_SIZE is the world-space base size of a tile; the
 # displayed size is CELL_SIZE * zoom.

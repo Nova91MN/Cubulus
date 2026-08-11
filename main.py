@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import random
 import sys
 from pathlib import Path
@@ -36,12 +37,16 @@ MENU_ITEMS = (
 OPTIONS_MENU_ITEMS = (
     "Automatische Bewegung",
     "Kamera-Zoom",
+    "Auflösung",
+    "Debug-Modus",
+    "Spielgeschwindigkeit",
     "Zurück"
 )
 
 MENU_GRID_WIDTH = 44
 MENU_GRID_HEIGHT = 30
 MENU_BOT_STEP_MS = 82
+SETTINGS_VERSION = 1
 
 
 def clamp(value: int, low: int, high: int) -> int:
@@ -109,11 +114,33 @@ class CubulusGame:
     def __init__(self) -> None:
         pygame.init()
 
+        self.settings_path = self.get_settings_path()
+        saved_settings = self.load_settings()
+
+        saved_resolution = saved_settings.get("resolution")
+        initial_resolution = (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+        if (
+            isinstance(saved_resolution, list)
+            and len(saved_resolution) == 2
+            and all(
+                isinstance(value, int) and not isinstance(value, bool)
+                for value in saved_resolution
+            )
+            and 800 <= saved_resolution[0] <= 3840
+            and 600 <= saved_resolution[1] <= 2160
+        ):
+            initial_resolution = tuple(saved_resolution)
+
+        self.resolution_index = min(
+            range(len(config.RESOLUTION_OPTIONS)),
+            key=lambda index: (
+                abs(config.RESOLUTION_OPTIONS[index][0] - initial_resolution[0])
+                + abs(config.RESOLUTION_OPTIONS[index][1] - initial_resolution[1])
+            )
+        )
+
         self.screen = pygame.display.set_mode(
-            (
-                config.WINDOW_WIDTH,
-                config.WINDOW_HEIGHT
-            ),
+            initial_resolution,
             pygame.RESIZABLE
         )
 
@@ -170,8 +197,14 @@ class CubulusGame:
         self.running = True
         self.state = "menu"
 
-        self.mode_index = 0
-        self.color_index = 0
+        self.mode_index = self.valid_saved_index(
+            saved_settings.get("game_mode_index"),
+            len(config.GAME_MODES)
+        )
+        self.color_index = self.valid_saved_index(
+            saved_settings.get("player_color_index"),
+            len(config.PLAYER_COLOR_OPTIONS)
+        )
 
         self.status_message = "Awaiting start"
 
@@ -191,10 +224,18 @@ class CubulusGame:
         # units separate makes zooming smooth and leaves gameplay untouched.
         self.camera_x = 0.5
         self.camera_y = 0.5
-        self.preferred_camera_zoom = config.CAMERA_START_ZOOM
+        saved_zoom = saved_settings.get("camera_zoom")
+        self.preferred_camera_zoom = (
+            max(config.CAMERA_MIN_ZOOM, min(config.CAMERA_MAX_ZOOM, saved_zoom))
+            if isinstance(saved_zoom, (int, float))
+            and not isinstance(saved_zoom, bool)
+            else config.CAMERA_START_ZOOM
+        )
         self.camera_zoom = self.preferred_camera_zoom
         self.camera_target_zoom = self.preferred_camera_zoom
         self.frame_dt = 1.0 / config.FPS
+        self.game_ticks_ms = 0.0
+        self.simulation_accumulator = 0.0
 
         self.pause_selection = 0
         self.pause_view = "main"
@@ -207,7 +248,26 @@ class CubulusGame:
         self.menu_item_rects: List[pygame.Rect] = []
         self.options_selection = 0
         self.options_item_rects: List[pygame.Rect] = []
-        self.auto_movement_enabled = True
+        saved_auto_movement = saved_settings.get("auto_movement_enabled")
+        self.auto_movement_enabled = (
+            saved_auto_movement
+            if isinstance(saved_auto_movement, bool)
+            else True
+        )
+        saved_debug_mode = saved_settings.get("debug_mode")
+        self.debug_mode = (
+            saved_debug_mode
+            if isinstance(saved_debug_mode, bool)
+            else False
+        )
+        saved_game_speed = saved_settings.get("game_speed")
+        self.game_speed_index = (
+            config.DEBUG_SPEED_OPTIONS.index(float(saved_game_speed))
+            if isinstance(saved_game_speed, (int, float))
+            and not isinstance(saved_game_speed, bool)
+            and float(saved_game_speed) in config.DEBUG_SPEED_OPTIONS
+            else config.DEBUG_SPEED_OPTIONS.index(1.0)
+        )
         self.human_move_direction: Optional[Coordinate] = None
         self.human_last_move_ticks = 0
         self.menu_board: List[List[str]] = []
@@ -224,6 +284,100 @@ class CubulusGame:
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_settings_path() -> Path:
+        """Return a per-user path that also works for packaged builds."""
+
+        override = os.environ.get("CUBULUS_SETTINGS_PATH")
+        if override:
+            return Path(override).expanduser()
+
+        if sys.platform == "win32":
+            base_dir = Path(os.environ.get("APPDATA", Path.home()))
+            return base_dir / "Cubulus" / "settings.json"
+
+        base_dir = Path(
+            os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+        )
+        return base_dir / "cubulus" / "settings.json"
+
+    @staticmethod
+    def valid_saved_index(value: object, item_count: int) -> int:
+        if isinstance(value, int) and not isinstance(value, bool):
+            if 0 <= value < item_count:
+                return value
+        return 0
+
+    def load_settings(self) -> Dict:
+        try:
+            with open(self.settings_path, "r", encoding="utf-8") as handle:
+                settings = json.load(handle)
+            if isinstance(settings, dict):
+                return settings
+            print("Ignoring settings: expected a JSON object.")
+        except FileNotFoundError:
+            pass
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"Could not load settings: {exc}")
+        return {}
+
+    def save_settings(self) -> None:
+        """Persist menu and gameplay preferences using an atomic replace."""
+
+        settings = {
+            "version": SETTINGS_VERSION,
+            "auto_movement_enabled": self.auto_movement_enabled,
+            "camera_zoom": round(self.preferred_camera_zoom, 2),
+            "resolution": list(self.screen.get_size()),
+            "debug_mode": self.debug_mode,
+            "game_speed": config.DEBUG_SPEED_OPTIONS[self.game_speed_index],
+            "game_mode_index": self.mode_index,
+            "player_color_index": self.color_index,
+        }
+
+        temporary_path = self.settings_path.with_suffix(".tmp")
+        try:
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(temporary_path, "w", encoding="utf-8") as handle:
+                json.dump(settings, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+            temporary_path.replace(self.settings_path)
+        except OSError as exc:
+            print(f"Could not save settings: {exc}")
+
+    def apply_resolution(
+        self,
+        resolution: Tuple[int, int],
+        save: bool = True
+    ) -> None:
+        self.screen = pygame.display.set_mode(resolution, pygame.RESIZABLE)
+        if resolution in config.RESOLUTION_OPTIONS:
+            self.resolution_index = config.RESOLUTION_OPTIONS.index(resolution)
+        if save:
+            self.save_settings()
+
+    def handle_resize(self, size: Tuple[int, int]) -> None:
+        """Keep manual window resizing and persisted resolution in sync."""
+
+        width = max(800, int(size[0]))
+        height = max(600, int(size[1]))
+        self.resolution_index = min(
+            range(len(config.RESOLUTION_OPTIONS)),
+            key=lambda index: (
+                abs(config.RESOLUTION_OPTIONS[index][0] - width)
+                + abs(config.RESOLUTION_OPTIONS[index][1] - height)
+            )
+        )
+        self.apply_resolution((width, height), save=False)
+
+    def game_ticks(self) -> int:
+        return int(self.game_ticks_ms)
+
+    def effective_game_speed(self) -> float:
+        if not self.debug_mode:
+            return 1.0
+        return config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
 
     def load_map(self) -> Dict:
 
@@ -474,11 +628,10 @@ class CubulusGame:
         self.pause_started_ticks = None
         self.pause_background = None
         self.human_move_direction = None
-        self.human_last_move_ticks = pygame.time.get_ticks()
-
-        self.match_start_ticks = (
-            pygame.time.get_ticks()
-        )
+        self.game_ticks_ms = 0.0
+        self.simulation_accumulator = 0.0
+        self.human_last_move_ticks = self.game_ticks()
+        self.match_start_ticks = self.game_ticks()
 
         self.status_message = (
             "Match running"
@@ -520,25 +673,8 @@ class CubulusGame:
         if self.state != "paused":
             return
 
-        current_ticks = pygame.time.get_ticks()
-        pause_duration = (
-            current_ticks - self.pause_started_ticks
-            if self.pause_started_ticks is not None
-            else 0
-        )
-
-        # Shift every real-time deadline by the pause duration so timers,
-        # damage protection and visual effects genuinely freeze while paused.
-        if self.match_start_ticks is not None:
-            self.match_start_ticks += pause_duration
-
-        for player in self.players:
-            if player.invulnerable_until > 0:
-                player.invulnerable_until += pause_duration
-
-        if self.damage_flash_until > 0:
-            self.damage_flash_until += pause_duration
-
+        # The simulation clock advances only during gameplay, so all match
+        # timers and cooldowns remain frozen without shifting deadlines.
         self.pause_started_ticks = None
         self.pause_background = None
         self.state = "playing"
@@ -737,6 +873,10 @@ class CubulusGame:
                     self.running = False
                     return
 
+                if event.type == pygame.VIDEORESIZE:
+                    self.handle_resize(event.size)
+                    continue
+
                 if event.type == pygame.KEYDOWN:
 
                     if event.key == pygame.K_ESCAPE:
@@ -767,20 +907,16 @@ class CubulusGame:
                         self.cycle_menu_option(1)
 
                     if event.key == pygame.K_m:
-
                         self.mode_index = (
                             self.mode_index + 1
-                        ) % len(
-                            config.GAME_MODES
-                        )
+                        ) % len(config.GAME_MODES)
+                        self.save_settings()
 
                     if event.key == pygame.K_c:
-
                         self.color_index = (
                             self.color_index + 1
-                        ) % len(
-                            config.PLAYER_COLOR_OPTIONS
-                        )
+                        ) % len(config.PLAYER_COLOR_OPTIONS)
+                        self.save_settings()
 
                     if event.key == pygame.K_RETURN:
 
@@ -821,6 +957,9 @@ class CubulusGame:
             self.color_index = (
                 self.color_index + direction
             ) % len(config.PLAYER_COLOR_OPTIONS)
+        else:
+            return
+        self.save_settings()
 
     def activate_menu_item(self) -> None:
         if self.menu_selection == 0:
@@ -1101,7 +1240,7 @@ class CubulusGame:
             self.running
         ):
 
-            self.frame_dt = min(
+            real_frame_dt = min(
                 self.clock.tick(config.FPS) / 1000.0,
                 0.05
             )
@@ -1111,7 +1250,17 @@ class CubulusGame:
             if self.state != "playing" or not self.running:
                 return
 
-            self.update_game_state()
+            self.simulation_accumulator += (
+                real_frame_dt * self.effective_game_speed()
+            )
+            simulation_step = 1.0 / config.FPS
+            while self.simulation_accumulator >= simulation_step:
+                self.frame_dt = simulation_step
+                self.game_ticks_ms += simulation_step * 1000.0
+                self.update_game_state()
+                self.simulation_accumulator -= simulation_step
+                if self.state != "playing" or not self.running:
+                    return
 
             self.draw_gameplay()
 
@@ -1123,6 +1272,10 @@ class CubulusGame:
 
                 self.running = False
                 return
+
+            if event.type == pygame.VIDEORESIZE:
+                self.handle_resize(event.size)
+                continue
 
             if (
                 event.type == pygame.KEYDOWN
@@ -1172,7 +1325,7 @@ class CubulusGame:
                     if self.auto_movement_enabled:
                         self.human_move_direction = (dx, dy)
                     self.move_human(dx, dy)
-                    self.human_last_move_ticks = pygame.time.get_ticks()
+                    self.human_last_move_ticks = self.game_ticks()
 
             if event.type == pygame.MOUSEWHEEL:
                 self.change_zoom(
@@ -1201,7 +1354,7 @@ class CubulusGame:
         if not self.auto_movement_enabled or self.human_move_direction is None:
             return
 
-        ticks = pygame.time.get_ticks()
+        ticks = self.game_ticks()
         if ticks - self.human_last_move_ticks < config.PLAYER_MOVE_INTERVAL_MS:
             return
 
@@ -1317,7 +1470,7 @@ class CubulusGame:
         territory_snapshot = (
             self.compute_territories()
         )
-        current_ticks = pygame.time.get_ticks()
+        current_ticks = self.game_ticks()
 
         for occupants in positions.values():
 
@@ -1429,7 +1582,7 @@ class CubulusGame:
             )
 
             elapsed = (
-                pygame.time.get_ticks()
+                self.game_ticks()
                 -
                 self.match_start_ticks
             ) / 1000.0
@@ -1527,7 +1680,7 @@ class CubulusGame:
             return None
 
         elapsed = (
-            pygame.time.get_ticks()
+            self.game_ticks()
             -
             self.match_start_ticks
         ) / 1000.0
@@ -1563,7 +1716,39 @@ class CubulusGame:
 
         self.draw_ui_panel()
 
+        self.draw_debug_overlay()
+
         pygame.display.flip()
+
+    def draw_debug_overlay(self) -> None:
+        if not self.debug_mode:
+            return
+
+        speed = config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
+        label = self.small_font.render(
+            f"DEBUG  |  SIMULATION {speed:g}x",
+            True,
+            (255, 206, 112)
+        )
+        padding_x = 13
+        padding_y = 8
+        rect = pygame.Rect(
+            self.screen.get_width() - label.get_width() - padding_x * 2 - 18,
+            18,
+            label.get_width() + padding_x * 2,
+            label.get_height() + padding_y * 2
+        )
+        badge = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(badge, (39, 29, 13, 220), badge.get_rect(), border_radius=12)
+        pygame.draw.rect(
+            badge,
+            (255, 183, 70, 190),
+            badge.get_rect(),
+            1,
+            border_radius=12
+        )
+        badge.blit(label, (padding_x, padding_y))
+        self.screen.blit(badge, rect.topleft)
 
     def draw_board(self) -> None:
 
@@ -1693,7 +1878,7 @@ class CubulusGame:
             if not player.alive:
                 continue
 
-            current_ticks = pygame.time.get_ticks()
+            current_ticks = self.game_ticks()
             if (
                 current_ticks < player.invulnerable_until
                 and (current_ticks // 100) % 2 == 0
@@ -1768,7 +1953,7 @@ class CubulusGame:
 
     def draw_damage_flash(self) -> None:
 
-        remaining = self.damage_flash_until - pygame.time.get_ticks()
+        remaining = self.damage_flash_until - self.game_ticks()
         if remaining <= 0:
             return
 
@@ -2008,6 +2193,7 @@ class CubulusGame:
             if self.options_selection == 1:
                 self.preferred_camera_zoom = config.CAMERA_START_ZOOM
                 self.camera_target_zoom = self.preferred_camera_zoom
+                self.save_settings()
         elif key in (pygame.K_RETURN, pygame.K_SPACE):
             self.activate_selected_option(source)
 
@@ -2020,12 +2206,32 @@ class CubulusGame:
         elif self.options_selection == 1:
             self.change_zoom(direction * config.CAMERA_ZOOM_STEP)
             self.preferred_camera_zoom = self.camera_target_zoom
+        elif self.options_selection == 2:
+            self.resolution_index = (
+                self.resolution_index + direction
+            ) % len(config.RESOLUTION_OPTIONS)
+            self.apply_resolution(
+                config.RESOLUTION_OPTIONS[self.resolution_index]
+            )
+            return
+        elif self.options_selection == 3:
+            self.debug_mode = not self.debug_mode
+            self.simulation_accumulator = 0.0
+        elif self.options_selection == 4:
+            if not self.debug_mode:
+                return
+            self.game_speed_index = (
+                self.game_speed_index + direction
+            ) % len(config.DEBUG_SPEED_OPTIONS)
+            self.simulation_accumulator = 0.0
+        else:
+            return
+
+        self.save_settings()
 
     def activate_selected_option(self, source: str) -> None:
 
-        if self.options_selection == 0:
-            self.adjust_selected_option(1)
-        elif self.options_selection == 1:
+        if self.options_selection < len(OPTIONS_MENU_ITEMS) - 1:
             self.adjust_selected_option(1)
         else:
             if source == "pause":
@@ -2044,8 +2250,8 @@ class CubulusGame:
 
     def draw_options_panel(self, width: int, height: int, source: str) -> None:
 
-        panel_width = min(560, max(390, int(width * 0.48)))
-        panel_height = min(610, max(520, height - 100))
+        panel_width = min(600, max(440, int(width * 0.52)))
+        panel_height = min(650, max(560, height - 40))
         panel_x = (
             max(28, int(width * 0.055))
             if source == "menu"
@@ -2060,25 +2266,25 @@ class CubulusGame:
             True,
             (113, 183, 255)
         )
-        self.screen.blit(eyebrow, (panel_x + 38, panel_y + 31))
+        self.screen.blit(eyebrow, (panel_x + 38, panel_y + 25))
         title = self.menu_heading_font.render(
             "OPTIONEN",
             True,
             (248, 250, 255)
         )
-        self.screen.blit(title, (panel_x + 38, panel_y + 58))
+        self.screen.blit(title, (panel_x + 38, panel_y + 49))
         subtitle = self.small_font.render(
-            "Passe Steuerung und Ansicht an.",
+            "Steuerung, Anzeige und Debug-Werkzeuge.",
             True,
             (151, 165, 184)
         )
-        self.screen.blit(subtitle, (panel_x + 38, panel_y + 94))
+        self.screen.blit(subtitle, (panel_x + 38, panel_y + 81))
 
         self.options_item_rects = []
-        rows_top = panel_y + 142
+        rows_top = panel_y + 120
         row_width = panel_width - 76
-        row_height = 82
-        row_gap = 14
+        row_height = 58
+        row_gap = 8
 
         for index, label in enumerate(OPTIONS_MENU_ITEMS):
             rect = pygame.Rect(
@@ -2089,6 +2295,7 @@ class CubulusGame:
             )
             self.options_item_rects.append(rect)
             selected = index == self.options_selection
+            disabled = index == 4 and not self.debug_mode
             fill = (25, 38, 55, 248) if selected else (14, 22, 33, 226)
             border = (83, 166, 255) if selected else (58, 72, 91)
             pygame.draw.rect(self.screen, fill, rect, border_radius=14)
@@ -2103,7 +2310,11 @@ class CubulusGame:
             label_surface = self.menu_button_font.render(
                 label,
                 True,
-                (244, 247, 252) if selected else (196, 205, 218)
+                (
+                    (112, 123, 139)
+                    if disabled
+                    else ((244, 247, 252) if selected else (196, 205, 218))
+                )
             )
             self.screen.blit(
                 label_surface,
@@ -2133,6 +2344,50 @@ class CubulusGame:
                     f"<  {zoom_percent} %  >",
                     True,
                     (113, 183, 255)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 20,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            elif index == 2:
+                resolution = self.screen.get_size()
+                value_surface = self.small_font.render(
+                    f"<  {resolution[0]} × {resolution[1]}  >",
+                    True,
+                    (113, 183, 255)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 20,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            elif index == 3:
+                value = "AN" if self.debug_mode else "AUS"
+                value_color = (
+                    (255, 193, 92) if self.debug_mode else (137, 149, 166)
+                )
+                value_surface = self.small_font.render(value, True, value_color)
+                pill = pygame.Rect(
+                    rect.right - 82,
+                    rect.centery - 17,
+                    58,
+                    34
+                )
+                pygame.draw.rect(self.screen, (42, 35, 23), pill, border_radius=17)
+                pygame.draw.rect(self.screen, value_color, pill, 1, border_radius=17)
+                self.screen.blit(value_surface, value_surface.get_rect(center=pill.center))
+            elif index == 4:
+                speed = config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
+                value = f"<  {speed:g}x  >" if self.debug_mode else "DEBUG AUS"
+                value_surface = self.small_font.render(
+                    value,
+                    True,
+                    (255, 193, 92) if self.debug_mode else (112, 123, 139)
                 )
                 self.screen.blit(
                     value_surface,
@@ -2171,6 +2426,10 @@ class CubulusGame:
                 if event.type == pygame.QUIT:
                     self.running = False
                     return
+
+                if event.type == pygame.VIDEORESIZE:
+                    self.handle_resize(event.size)
+                    continue
 
                 if event.type == pygame.KEYDOWN:
 
@@ -2438,6 +2697,10 @@ class CubulusGame:
                     self.running = False
                     return
 
+                if event.type == pygame.VIDEORESIZE:
+                    self.handle_resize(event.size)
+                    continue
+
                 if (
                     event.type == pygame.KEYDOWN
                     and
@@ -2539,6 +2802,7 @@ class CubulusGame:
 
                 self.game_over_loop()
 
+        self.save_settings()
         pygame.quit()
 
         sys.exit(0)
