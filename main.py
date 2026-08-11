@@ -18,6 +18,12 @@ import config
 
 
 Coordinate = Tuple[int, int]
+PAUSE_MENU_ITEMS = (
+    "Fortsetzen",
+    "Optionen",
+    "Hauptmenü",
+    "Beenden"
+)
 
 
 def clamp(value: int, low: int, high: int) -> int:
@@ -152,6 +158,11 @@ class CubulusGame:
         self.camera_zoom = config.CAMERA_START_ZOOM
         self.camera_target_zoom = config.CAMERA_START_ZOOM
         self.frame_dt = 1.0 / config.FPS
+
+        self.pause_selection = 0
+        self.pause_view = "main"
+        self.pause_started_ticks: Optional[int] = None
+        self.pause_item_rects: List[pygame.Rect] = []
 
     # ------------------------------------------------------------------
     # Utility
@@ -401,6 +412,9 @@ class CubulusGame:
         self.damage_flash_until = 0
         self.game_over_title = "SPIELENDE"
         self.game_over_color = config.COLORS["white"]
+        self.pause_selection = 0
+        self.pause_view = "main"
+        self.pause_started_ticks = None
 
         self.match_start_ticks = (
             pygame.time.get_ticks()
@@ -428,6 +442,50 @@ class CubulusGame:
         self.state = "game_over"
 
         self.match_start_ticks = None
+
+    def pause_match(self) -> None:
+
+        if self.state != "playing":
+            return
+
+        self.pause_started_ticks = pygame.time.get_ticks()
+        self.pause_selection = 0
+        self.pause_view = "main"
+        self.state = "paused"
+
+    def resume_match(self) -> None:
+
+        if self.state != "paused":
+            return
+
+        current_ticks = pygame.time.get_ticks()
+        pause_duration = (
+            current_ticks - self.pause_started_ticks
+            if self.pause_started_ticks is not None
+            else 0
+        )
+
+        # Shift every real-time deadline by the pause duration so timers,
+        # damage protection and visual effects genuinely freeze while paused.
+        if self.match_start_ticks is not None:
+            self.match_start_ticks += pause_duration
+
+        for player in self.players:
+            if player.invulnerable_until > 0:
+                player.invulnerable_until += pause_duration
+
+        if self.damage_flash_until > 0:
+            self.damage_flash_until += pause_duration
+
+        self.pause_started_ticks = None
+        self.state = "playing"
+
+    def return_to_main_menu(self) -> None:
+
+        self.state = "menu"
+        self.match_start_ticks = None
+        self.pause_started_ticks = None
+        self.status_message = "Awaiting start"
 
     # ------------------------------------------------------------------
     # Menu
@@ -576,6 +634,9 @@ class CubulusGame:
 
             self.handle_game_events()
 
+            if self.state != "playing" or not self.running:
+                return
+
             self.update_game_state()
 
             self.draw_gameplay()
@@ -595,7 +656,7 @@ class CubulusGame:
                 event.key == pygame.K_ESCAPE
             ):
 
-                self.running = False
+                self.pause_match()
                 return
 
             if event.type == pygame.KEYDOWN:
@@ -1189,6 +1250,213 @@ class CubulusGame:
         self.screen.blit(territory_surface, text_position)
 
     # ------------------------------------------------------------------
+    # Pause menu
+    # ------------------------------------------------------------------
+
+    def pause_loop(self) -> None:
+
+        while self.state == "paused" and self.running:
+
+            for event in pygame.event.get():
+
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    return
+
+                if event.type == pygame.KEYDOWN:
+
+                    if event.key == pygame.K_ESCAPE:
+                        if self.pause_view == "options":
+                            self.pause_view = "main"
+                        else:
+                            self.resume_match()
+                            return
+
+                    elif self.pause_view == "main":
+
+                        if event.key in (pygame.K_UP, pygame.K_w):
+                            self.pause_selection = (
+                                self.pause_selection - 1
+                            ) % len(PAUSE_MENU_ITEMS)
+
+                        elif event.key in (pygame.K_DOWN, pygame.K_s):
+                            self.pause_selection = (
+                                self.pause_selection + 1
+                            ) % len(PAUSE_MENU_ITEMS)
+
+                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                            self.activate_pause_option()
+
+                    else:
+
+                        if event.key in (
+                            pygame.K_LEFT,
+                            pygame.K_a,
+                            pygame.K_MINUS,
+                            pygame.K_KP_MINUS
+                        ):
+                            self.change_zoom(-config.CAMERA_ZOOM_STEP)
+
+                        elif event.key in (
+                            pygame.K_RIGHT,
+                            pygame.K_d,
+                            pygame.K_PLUS,
+                            pygame.K_EQUALS,
+                            pygame.K_KP_PLUS
+                        ):
+                            self.change_zoom(config.CAMERA_ZOOM_STEP)
+
+                        elif event.key in (pygame.K_0, pygame.K_KP0):
+                            self.camera_target_zoom = config.CAMERA_START_ZOOM
+
+                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                            self.pause_view = "main"
+
+                if self.pause_view == "main":
+
+                    if event.type == pygame.MOUSEMOTION:
+                        self.select_pause_item_at(event.pos)
+
+                    if (
+                        event.type == pygame.MOUSEBUTTONDOWN
+                        and event.button == 1
+                        and self.select_pause_item_at(event.pos)
+                    ):
+                        self.activate_pause_option()
+
+            if self.state != "paused" or not self.running:
+                return
+
+            self.draw_pause_menu()
+            self.clock.tick(config.FPS)
+
+    def select_pause_item_at(self, position: Coordinate) -> bool:
+
+        for index, rect in enumerate(self.pause_item_rects):
+            if rect.collidepoint(position):
+                self.pause_selection = index
+                return True
+
+        return False
+
+    def activate_pause_option(self) -> None:
+
+        selected = PAUSE_MENU_ITEMS[self.pause_selection]
+
+        if selected == "Fortsetzen":
+            self.resume_match()
+
+        elif selected == "Optionen":
+            self.pause_view = "options"
+
+        elif selected == "Hauptmenü":
+            self.return_to_main_menu()
+
+        elif selected == "Beenden":
+            self.running = False
+
+    def draw_pause_menu(self) -> None:
+
+        self.screen.fill(config.COLORS["background"])
+        width, height = self.screen.get_size()
+
+        if self.pause_view == "options":
+            self.draw_pause_options(width, height)
+            pygame.display.flip()
+            return
+
+        title_surface = self.title_font.render(
+            "PAUSIERT",
+            True,
+            config.COLORS["white"]
+        )
+        self.screen.blit(
+            title_surface,
+            (
+                width // 2 - title_surface.get_width() // 2,
+                max(72, int(height * 0.13))
+            )
+        )
+
+        self.pause_item_rects = []
+        item_y = int(height * 0.30)
+        item_gap = max(72, int(height * 0.10))
+
+        for index, label in enumerate(PAUSE_MENU_ITEMS):
+            color = (
+                config.COLORS["yellow"]
+                if index == self.pause_selection
+                else config.COLORS["white"]
+            )
+            surface = self.hud_font.render(label, True, color)
+            position = (
+                width // 2 - surface.get_width() // 2,
+                item_y + index * item_gap
+            )
+            self.screen.blit(surface, position)
+            self.pause_item_rects.append(
+                surface.get_rect(topleft=position).inflate(64, 24)
+            )
+
+        hint_surface = self.small_font.render(
+            "Pfeiltasten / WASD: Auswählen   •   ENTER: Bestätigen   •   ESC: Fortsetzen",
+            True,
+            config.COLORS["muted"]
+        )
+        self.screen.blit(
+            hint_surface,
+            (
+                width // 2 - hint_surface.get_width() // 2,
+                height - 55
+            )
+        )
+
+        pygame.display.flip()
+
+    def draw_pause_options(self, width: int, height: int) -> None:
+
+        self.pause_item_rects = []
+        title_surface = self.title_font.render(
+            "OPTIONEN",
+            True,
+            config.COLORS["white"]
+        )
+        self.screen.blit(
+            title_surface,
+            (
+                width // 2 - title_surface.get_width() // 2,
+                max(72, int(height * 0.13))
+            )
+        )
+
+        zoom_percent = round(self.camera_target_zoom * 100)
+        zoom_surface = self.hud_font.render(
+            f"‹   Kamera-Zoom: {zoom_percent} %   ›",
+            True,
+            config.COLORS["yellow"]
+        )
+        self.screen.blit(
+            zoom_surface,
+            (
+                width // 2 - zoom_surface.get_width() // 2,
+                int(height * 0.36)
+            )
+        )
+
+        hint_surface = self.small_font.render(
+            "Links / Rechts: Anpassen   •   0: Zurücksetzen   •   ESC / ENTER: Zurück",
+            True,
+            config.COLORS["muted"]
+        )
+        self.screen.blit(
+            hint_surface,
+            (
+                width // 2 - hint_surface.get_width() // 2,
+                height - 55
+            )
+        )
+
+    # ------------------------------------------------------------------
     # Game Over
     # ------------------------------------------------------------------
 
@@ -1299,6 +1567,10 @@ class CubulusGame:
             elif self.state == "playing":
 
                 self.playing_loop()
+
+            elif self.state == "paused":
+
+                self.pause_loop()
 
             elif self.state == "game_over":
 
