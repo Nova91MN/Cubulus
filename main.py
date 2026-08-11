@@ -280,11 +280,6 @@ class CubulusGame:
         if current == "neutral":
 
             self.board[y][x] = player.color
-
-        elif current != player.color:
-
-            player.color = current
-
     def compute_territories(
         self
     ) -> Dict[int, int]:
