@@ -1,6 +1,14 @@
-# Cubulus 0.2.0
+# Cubulus 0.3.0
 
 Cubulus is a small territory game built with Python and Pygame.
+
+## What's new in 0.3.0
+
+Version 0.3.0 introduces Territory mode, three additional difficulty levels,
+random names for AI opponents, and six additional player colors. Territory
+mode allows players to conquer claimed tiles and uses difficulty-dependent map
+share goals with infinite lives. See the [changelog](CHANGELOG.md) for the full
+release notes.
 
 ## Controls
 
