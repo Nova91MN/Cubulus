@@ -35,12 +35,33 @@ TIMED_MODE_SECONDS = 600
 PLAYER_MOVE_INTERVAL_MS = 85
 
 # Difficulty affects how often bots move and how consistently they pursue the
-# human player.  Keeping the values here makes them easy to tune.
-DIFFICULTY_LEVELS = ("Easy", "Normal", "Hard")
+# human player. In Territory mode it also defines the share of all playable
+# tiles a color has to conquer to win.
+DIFFICULTY_LEVELS = (
+    "Beginner",
+    "Easy",
+    "Normal",
+    "Hard",
+    "Expert",
+    "God",
+)
 DIFFICULTY_PROFILES = {
+    "Beginner": {"bot_move_chance": 0.07, "bot_chase_chance": 0.12},
     "Easy": {"bot_move_chance": 0.12, "bot_chase_chance": 0.25},
     "Normal": {"bot_move_chance": 0.24, "bot_chase_chance": 0.55},
     "Hard": {"bot_move_chance": 0.40, "bot_chase_chance": 0.85},
+    "Expert": {"bot_move_chance": 0.55, "bot_chase_chance": 0.95},
+    # God uses the Expert AI profile. Its additional bot alliance is handled
+    # by the collision rules in main.py.
+    "God": {"bot_move_chance": 0.55, "bot_chase_chance": 0.95},
+}
+TERRITORY_WIN_PERCENTAGES = {
+    "Beginner": 0.025,
+    "Easy": 0.05,
+    "Normal": 0.10,
+    "Hard": 0.20,
+    "Expert": 0.50,
+    "God": 0.75,
 }
 
 # Colors used in the game
@@ -74,5 +95,5 @@ PLAYER_NAMES = {
 }
 
 PLAYER_COLOR_OPTIONS = ["red", "yellow", "green", "blue"]
-GAME_MODES = ["Untimed", "Timed"]
+GAME_MODES = ["Untimed", "Timed", "Territory"]
 

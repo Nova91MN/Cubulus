@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     sys.modules["pygame"] = pygame_stub
 
 import config  # noqa: E402
-from main import APP_VERSION, CubulusGame, TRANSLATIONS  # noqa: E402
+from main import APP_VERSION, CubulusGame, Player, TRANSLATIONS  # noqa: E402
 
 
 class MapLoadingTests(unittest.TestCase):
@@ -101,7 +101,7 @@ class SettingsTests(unittest.TestCase):
         game.game_speed_index = config.DEBUG_SPEED_OPTIONS.index(1.0)
         game.mode_index = 0
         game.color_index = 1
-        game.difficulty_index = 2
+        game.difficulty_index = config.DIFFICULTY_LEVELS.index("Expert")
         game.player_name = "Nova"
         game.language = "de"
         game.map_path = Path("maps/default.json")
@@ -116,8 +116,12 @@ class SettingsTests(unittest.TestCase):
         settings = dump.call_args.args[0]
 
         self.assertEqual("Nova", settings["player_name"])
-        self.assertEqual(2, settings["difficulty_index"])
-        self.assertEqual("0.2.0", APP_VERSION)
+        self.assertEqual(
+            config.DIFFICULTY_LEVELS.index("Expert"),
+            settings["difficulty_index"],
+        )
+        self.assertEqual("Expert", settings["difficulty"])
+        self.assertEqual("0.3.0", APP_VERSION)
 
     def test_player_name_is_sanitized(self) -> None:
         self.assertEqual("Nova Player", CubulusGame.sanitize_player_name("  Nova   Player  "))
@@ -127,6 +131,97 @@ class SettingsTests(unittest.TestCase):
 class TranslationTests(unittest.TestCase):
     def test_languages_have_the_same_keys(self) -> None:
         self.assertEqual(set(TRANSLATIONS["de"]), set(TRANSLATIONS["en"]))
+
+
+class TerritoryModeTests(unittest.TestCase):
+    @staticmethod
+    def make_game(difficulty: str = "Normal") -> CubulusGame:
+        game = CubulusGame.__new__(CubulusGame)
+        game.mode_index = config.GAME_MODES.index("Territory")
+        game.difficulty_index = config.DIFFICULTY_LEVELS.index(difficulty)
+        game.language = "de"
+        game.damage_flash_until = 0
+        game.status_message = ""
+        game.players = []
+        game.territory_counts = {}
+        return game
+
+    def test_enemy_tiles_can_be_conquered(self) -> None:
+        game = self.make_game()
+        game.board = [["red"]]
+        player = Player(1, "Bot-1", (0, 0), "yellow")
+
+        game.apply_tile_effect(player)
+
+        self.assertEqual("yellow", game.board[0][0])
+
+    def test_target_uses_playable_map_area(self) -> None:
+        game = self.make_game("Beginner")
+        game.board = [["neutral"] * 10 for _ in range(10)]
+        game.board[0][0] = "obstacle"
+
+        self.assertEqual(3, game.territory_target_tiles())
+        self.assertEqual("2.5", game.territory_target_percent())
+
+    def test_unique_leader_wins_after_reaching_target(self) -> None:
+        game = self.make_game("Beginner")
+        game.board = [["neutral"] * 10 for _ in range(10)]
+        game.players = [
+            Player(0, "Nova", (0, 0), "red", is_human=True),
+            Player(1, "Bot-1", (9, 0), "yellow"),
+            Player(2, "Bot-2", (0, 9), "green"),
+            Player(3, "Bot-3", (9, 9), "blue"),
+        ]
+        game.territory_counts = {0: 3, 1: 2, 2: 1, 3: 1}
+
+        self.assertIs(game.players[0], game.determine_territory_winner())
+
+        game.territory_counts[1] = 3
+        self.assertIsNone(game.determine_territory_winner())
+
+    def test_collision_resets_without_removing_a_life(self) -> None:
+        game = self.make_game()
+        game.board = [
+            ["red", "red"],
+            ["yellow", "neutral"],
+        ]
+        human = Player(0, "Nova", (0, 0), "red", is_human=True)
+        bot = Player(1, "Bot-1", (1, 1), "yellow")
+        bot.position = human.position
+        game.players = [human, bot]
+        game.game_ticks = lambda: 1000
+
+        game.resolve_collisions()
+
+        self.assertEqual((1, 1), bot.position)
+        self.assertEqual(config.PLAYER_LIVES, bot.lives)
+        self.assertTrue(bot.alive)
+
+    def test_god_mode_bots_do_not_damage_each_other(self) -> None:
+        game = self.make_game("God")
+        game.board = [
+            ["yellow", "yellow"],
+            ["green", "neutral"],
+        ]
+        first_bot = Player(1, "Bot-1", (1, 1), "yellow")
+        second_bot = Player(2, "Bot-2", (0, 1), "green")
+        first_bot.position = (0, 0)
+        second_bot.position = (0, 0)
+        game.players = [first_bot, second_bot]
+        game.game_ticks = lambda: 1000
+
+        game.resolve_collisions()
+
+        self.assertEqual((0, 0), first_bot.position)
+        self.assertEqual((0, 0), second_bot.position)
+        self.assertEqual(config.PLAYER_LIVES, first_bot.lives)
+        self.assertEqual(config.PLAYER_LIVES, second_bot.lives)
+
+    def test_expert_and_god_share_the_same_ai_profile(self) -> None:
+        self.assertEqual(
+            config.DIFFICULTY_PROFILES["Expert"],
+            config.DIFFICULTY_PROFILES["God"],
+        )
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 
 print(f"Cubulus v{APP_VERSION} Demo - Python build")
 
@@ -79,9 +79,13 @@ TRANSLATIONS = {
         "language_name": "Deutsch",
         "mode_untimed": "Endlos",
         "mode_timed": "10 Minuten",
+        "mode_territory": "Territorium",
+        "difficulty_beginner": "Anfänger",
         "difficulty_easy": "Leicht",
         "difficulty_normal": "Normal",
         "difficulty_hard": "Schwer",
+        "difficulty_expert": "Experte",
+        "difficulty_god": "Gott",
         "color_red": "Rot",
         "color_yellow": "Gelb",
         "color_green": "Grün",
@@ -114,9 +118,13 @@ TRANSLATIONS = {
         "time_no_winner": "Zeit abgelaufen. Kein Gewinner.",
         "time_winner": "Zeit abgelaufen. {name} gewinnt!",
         "time_tie": "Zeit abgelaufen. Gleichstand zwischen: {names}",
+        "territory_winner": "{name} hat das Gebietsziel erreicht!",
+        "territory_reset": "{name} wurde zum Startpunkt zurückgesetzt.",
         "match_active": "MATCH LÄUFT",
         "ten_minutes": "10 MINUTEN",
         "endless": "ENDLOS",
+        "territory_target": "ZIEL {percent}%",
+        "infinite": "UNENDLICH",
         "pause_short": "ESC  PAUSE",
         "you": "DU",
         "territories": "GEBIETE",
@@ -169,9 +177,13 @@ TRANSLATIONS = {
         "language_name": "English",
         "mode_untimed": "Untimed",
         "mode_timed": "10 minutes",
+        "mode_territory": "Territory",
+        "difficulty_beginner": "Beginner",
         "difficulty_easy": "Easy",
         "difficulty_normal": "Normal",
         "difficulty_hard": "Hard",
+        "difficulty_expert": "Expert",
+        "difficulty_god": "God",
         "color_red": "Red",
         "color_yellow": "Yellow",
         "color_green": "Green",
@@ -204,9 +216,13 @@ TRANSLATIONS = {
         "time_no_winner": "Time expired. No winner.",
         "time_winner": "Time expired. {name} wins!",
         "time_tie": "Time expired. Tie between: {names}",
+        "territory_winner": "{name} reached the territory target!",
+        "territory_reset": "{name} was reset to the spawn point.",
         "match_active": "MATCH ACTIVE",
         "ten_minutes": "10 MINUTES",
         "endless": "UNTIMED",
+        "territory_target": "TARGET {percent}%",
+        "infinite": "INFINITE",
         "pause_short": "ESC  PAUSE",
         "you": "YOU",
         "territories": "TERRITORY",
@@ -239,7 +255,7 @@ TRANSLATIONS = {
 MENU_GRID_WIDTH = 44
 MENU_GRID_HEIGHT = 30
 MENU_BOT_STEP_MS = 82
-SETTINGS_VERSION = 3
+SETTINGS_VERSION = 4
 MIN_MAP_SIZE = 4
 MAX_MAP_SIZE = 500
 
@@ -404,14 +420,34 @@ class CubulusGame:
             saved_settings.get("player_color_index"),
             len(config.PLAYER_COLOR_OPTIONS)
         )
-        saved_difficulty = saved_settings.get("difficulty_index")
-        self.difficulty_index = (
-            saved_difficulty
-            if isinstance(saved_difficulty, int)
-            and not isinstance(saved_difficulty, bool)
-            and 0 <= saved_difficulty < len(config.DIFFICULTY_LEVELS)
-            else config.DIFFICULTY_LEVELS.index("Normal")
-        )
+        saved_difficulty_name = saved_settings.get("difficulty")
+        saved_difficulty_index = saved_settings.get("difficulty_index")
+        if saved_difficulty_name in config.DIFFICULTY_LEVELS:
+            self.difficulty_index = config.DIFFICULTY_LEVELS.index(
+                saved_difficulty_name
+            )
+        elif (
+            isinstance(saved_difficulty_index, int)
+            and not isinstance(saved_difficulty_index, bool)
+        ):
+            # Versions through 0.2.0 stored only the index of
+            # Easy/Normal/Hard. Preserve its meaning after inserting Beginner.
+            legacy_levels = ("Easy", "Normal", "Hard")
+            saved_version = saved_settings.get("version", 0)
+            legacy_settings = (
+                not isinstance(saved_version, int)
+                or isinstance(saved_version, bool)
+                or saved_version < SETTINGS_VERSION
+            )
+            if legacy_settings and 0 <= saved_difficulty_index < 3:
+                legacy_name = legacy_levels[saved_difficulty_index]
+                self.difficulty_index = config.DIFFICULTY_LEVELS.index(legacy_name)
+            elif 0 <= saved_difficulty_index < len(config.DIFFICULTY_LEVELS):
+                self.difficulty_index = saved_difficulty_index
+            else:
+                self.difficulty_index = config.DIFFICULTY_LEVELS.index("Normal")
+        else:
+            self.difficulty_index = config.DIFFICULTY_LEVELS.index("Normal")
         self.player_name = self.sanitize_player_name(
             saved_settings.get("player_name", config.PLAYER_NAMES[0])
         )
@@ -543,6 +579,45 @@ class CubulusGame:
         )
         return template.format(**values)
 
+    def current_mode(self) -> str:
+        return config.GAME_MODES[getattr(self, "mode_index", 0)]
+
+    def current_difficulty(self) -> str:
+        default = config.DIFFICULTY_LEVELS.index("Normal")
+        return config.DIFFICULTY_LEVELS[
+            getattr(self, "difficulty_index", default)
+        ]
+
+    def is_territory_mode(self) -> bool:
+        return self.current_mode() == "Territory"
+
+    def god_alliance_active(self) -> bool:
+        return self.current_difficulty() == "God"
+
+    def territory_win_fraction(self) -> float:
+        return config.TERRITORY_WIN_PERCENTAGES[self.current_difficulty()]
+
+    def territory_target_tiles(self) -> int:
+        playable_tiles = sum(
+            tile != "obstacle"
+            for row in self.board
+            for tile in row
+        )
+        return max(1, math.ceil(playable_tiles * self.territory_win_fraction()))
+
+    def territory_target_percent(self) -> str:
+        percentage = self.territory_win_fraction() * 100
+        return f"{percentage:g}"
+
+    def mode_display_label(self) -> str:
+        mode_keys = {
+            "Untimed": "mode_untimed",
+            "Timed": "mode_timed",
+            "Territory": "mode_territory",
+        }
+        mode = self.current_mode()
+        return self.t(mode_keys.get(mode, mode))
+
     @staticmethod
     def get_settings_path() -> Path:
         """Return a per-user path that also works for packaged builds."""
@@ -603,6 +678,7 @@ class CubulusGame:
             "game_mode_index": self.mode_index,
             "player_color_index": self.color_index,
             "difficulty_index": self.difficulty_index,
+            "difficulty": self.current_difficulty(),
             "player_name": self.player_name,
             "language": self.language,
             "map_path": str(self.map_path),
@@ -1332,7 +1408,10 @@ class CubulusGame:
 
         current = self.board[y][x]
 
-        if current == "neutral":
+        if current == "neutral" or (
+            self.is_territory_mode()
+            and current != "obstacle"
+        ):
 
             self.board[y][x] = player.color
 
@@ -1963,7 +2042,8 @@ class CubulusGame:
         self.menu_item_rects = []
         mode_labels = {
             "Untimed": self.t("mode_untimed"),
-            "Timed": self.t("mode_timed")
+            "Timed": self.t("mode_timed"),
+            "Territory": self.t("mode_territory"),
         }
         color_labels = {
             "red": self.t("color_red"),
@@ -2017,9 +2097,12 @@ class CubulusGame:
                 )
             elif item_key == "menu_difficulty":
                 difficulty_labels = {
+                    "Beginner": self.t("difficulty_beginner"),
                     "Easy": self.t("difficulty_easy"),
                     "Normal": self.t("difficulty_normal"),
                     "Hard": self.t("difficulty_hard"),
+                    "Expert": self.t("difficulty_expert"),
+                    "God": self.t("difficulty_god"),
                 }
                 difficulty = config.DIFFICULTY_LEVELS[self.difficulty_index]
                 value_surface = self.small_font.render(
@@ -2461,25 +2544,64 @@ class CubulusGame:
             if len(occupants) < 2:
                 continue
 
-            best = max(
-                territory_snapshot[
-                    player.player_id
-                ]
-                for player in occupants
-            )
+            if self.god_alliance_active():
+                human = next(
+                    (player for player in occupants if player.is_human),
+                    None
+                )
+                bots = [player for player in occupants if not player.is_human]
+                if human is None or not bots:
+                    # Allied bots never damage one another.
+                    continue
+                human_strength = territory_snapshot[human.player_id]
+                bot_strength = max(
+                    territory_snapshot[bot.player_id]
+                    for bot in bots
+                )
+                if human_strength < bot_strength:
+                    losers = [human]
+                elif human_strength > bot_strength:
+                    losers = bots
+                else:
+                    losers = []
+            else:
+                best = max(
+                    territory_snapshot[
+                        player.player_id
+                    ]
+                    for player in occupants
+                )
 
-            losers = [
-                player
-                for player in occupants
-                if territory_snapshot[
-                    player.player_id
-                ] < best
-            ]
+                losers = [
+                    player
+                    for player in occupants
+                    if territory_snapshot[
+                        player.player_id
+                    ] < best
+                ]
 
             if not losers:
                 continue
 
             for loser in losers:
+
+                if self.is_territory_mode():
+                    if current_ticks < loser.invulnerable_until:
+                        continue
+                    loser.invulnerable_until = (
+                        current_ticks + config.DAMAGE_COOLDOWN_MS
+                    )
+                    loser.position = loser.start_position
+                    self.apply_tile_effect(loser)
+                    if loser.is_human:
+                        self.damage_flash_until = (
+                            current_ticks + config.DAMAGE_FLASH_MS
+                        )
+                    self.status_message = self.t(
+                        "territory_reset",
+                        name=loser.name
+                    )
+                    continue
 
                 if not loser.take_damage(current_ticks):
                     continue
@@ -2508,9 +2630,43 @@ class CubulusGame:
                         lives=loser.lives
                     )
 
+    def determine_territory_winner(self) -> Optional[Player]:
+        counts = self.territory_counts or self.compute_territories()
+        if not self.players:
+            return None
+
+        highest = max(counts.get(player.player_id, 0) for player in self.players)
+        if highest < self.territory_target_tiles():
+            return None
+
+        leaders = [
+            player
+            for player in self.players
+            if counts.get(player.player_id, 0) == highest
+        ]
+        return leaders[0] if len(leaders) == 1 else None
+
     def check_victory_conditions(
         self
     ) -> None:
+
+        if self.is_territory_mode():
+            winner = self.determine_territory_winner()
+            if winner is not None:
+                self.end_match(
+                    self.t("territory_winner", name=winner.name),
+                    title=(
+                        self.t("victory")
+                        if winner.is_human
+                        else self.t("game_over")
+                    ),
+                    color=(
+                        config.COLORS["green"]
+                        if winner.is_human
+                        else config.COLORS["white"]
+                    )
+                )
+            return
 
         alive = self.alive_players()
 
@@ -2976,17 +3132,20 @@ class CubulusGame:
         )
         self.screen.blit(title, (brand_rect.x + 17, brand_rect.y + 35))
 
-        mode = config.GAME_MODES[self.mode_index]
-        mode_label = (
-            self.t("ten_minutes")
-            if mode == "Timed"
-            else self.t("endless")
-        )
+        mode = self.current_mode()
+        mode_label = self.mode_display_label().upper()
         remaining = self.remaining_time()
         match_value = (
             f"{remaining // 60:02d}:{remaining % 60:02d}"
             if remaining is not None
-            else mode_label
+            else (
+                self.t(
+                    "territory_target",
+                    percent=self.territory_target_percent()
+                )
+                if mode == "Territory"
+                else mode_label
+            )
         )
         info_width = min(230, max(175, width // 5))
         info_rect = pygame.Rect(
@@ -3109,17 +3268,30 @@ class CubulusGame:
             )
 
             pip_y = item_rect.y + (63 if compact else 72)
-            pip_x = item_rect.right - 24
-            for life_index in range(config.PLAYER_LIVES - 1, -1, -1):
-                filled = life_index < player.lives
-                pygame.draw.circle(
-                    self.screen,
-                    color if filled else (65, 76, 91),
-                    (pip_x, pip_y),
-                    4,
-                    0 if filled else 1
+            if self.is_territory_mode():
+                infinity_surface = self.menu_heading_font.render(
+                    "∞",
+                    True,
+                    color
                 )
-                pip_x -= 13
+                self.screen.blit(
+                    infinity_surface,
+                    infinity_surface.get_rect(
+                        midright=(item_rect.right - 19, pip_y)
+                    )
+                )
+            else:
+                pip_x = item_rect.right - 24
+                for life_index in range(config.PLAYER_LIVES - 1, -1, -1):
+                    filled = life_index < player.lives
+                    pygame.draw.circle(
+                        self.screen,
+                        color if filled else (65, 76, 91),
+                        (pip_x, pip_y),
+                        4,
+                        0 if filled else 1
+                    )
+                    pip_x -= 13
 
     def draw_glass_panel(
         self,
@@ -3574,13 +3746,27 @@ class CubulusGame:
         pygame.draw.rect(self.screen, (68, 156, 255), accent, border_radius=2)
 
         human = self.players[0] if self.players else None
-        mode = config.GAME_MODES[self.mode_index]
+        mode = self.current_mode()
+        pause_mode_label = self.mode_display_label()
+        if mode == "Territory":
+            pause_mode_label = (
+                f"{pause_mode_label} · "
+                + self.t(
+                    "territory_target",
+                    percent=self.territory_target_percent()
+                )
+            )
         stat_values = (
             (
                 self.t("mode"),
-                self.t("ten_minutes") if mode == "Timed" else self.t("endless")
+                pause_mode_label
             ),
-            (self.t("lives"), str(human.lives if human else 0)),
+            (
+                self.t("lives"),
+                self.t("infinite")
+                if mode == "Territory"
+                else str(human.lives if human else 0)
+            ),
             (self.t("territories"), str(self.territory_counts.get(0, 0)))
         )
         stats_rect = pygame.Rect(

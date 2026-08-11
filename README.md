@@ -18,9 +18,28 @@ Use **Player name / Spielername** in the main menu to enter a name of up to
 16 characters. The name is shown in the match HUD and saved with the other
 settings, so it is restored on the next launch.
 
-The **Difficulty / Schwierigkeit** row offers Easy, Normal, and Hard. Higher
-levels make the bots move more frequently and pursue the human player more
-consistently. The selected difficulty is also saved automatically.
+The **Difficulty / Schwierigkeit** row offers Beginner, Easy, Normal, Hard,
+Expert, and God. Higher levels make the bots move more frequently and pursue
+the human player more consistently. God uses the Expert AI profile, but all
+bots form an alliance against the human player and do not damage one another.
+The selected difficulty is also saved automatically.
+
+## Territory mode
+
+Territory mode lets every player conquer tiles that another color has already
+marked. Lives are infinite: losing a collision still returns the weaker player
+to the spawn point, but never eliminates them. The first color that reaches the
+selected map share while holding the unique lead wins:
+
+- Beginner: 2.5%
+- Easy: 5%
+- Normal: 10%
+- Hard: 20%
+- Expert: 50%
+- God: 75%
+
+Obstacles are excluded when the required tile count is calculated. Bots keep
+the same movement and pursuit behavior as in the other game modes.
 
 ## Language
 
