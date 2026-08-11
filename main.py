@@ -1378,23 +1378,34 @@ class CubulusGame:
             self.compute_territories()
         )
 
+        contenders = self.alive_players()
+
+        if not contenders:
+
+            return (
+                "Time expired. No winner."
+            )
+
+        # Eliminated players keep the tiles they marked.  They must not set
+        # the score to beat, otherwise the timed match can finish without a
+        # winner even though two or more active players are still competing.
         highest = (
-            max(counts.values())
-            if counts
-            else 0
+            max(
+                counts.get(
+                    player.player_id,
+                    0
+                )
+                for player in contenders
+            )
         )
 
         leaders = [
             player
-            for player in self.players
-            if (
-                counts.get(
-                    player.player_id,
-                    0
-                ) == highest
-                and
-                player.alive
-            )
+            for player in contenders
+            if counts.get(
+                player.player_id,
+                0
+            ) == highest
         ]
 
         if len(leaders) == 1:
