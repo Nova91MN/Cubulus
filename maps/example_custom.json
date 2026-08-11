@@ -1,0 +1,11 @@
+{
+  "name": "Wide Arena",
+  "width": 120,
+  "height": 64,
+  "player_starts": [
+    [4, 4],
+    [115, 4],
+    [4, 59],
+    [115, 59]
+  ]
+}

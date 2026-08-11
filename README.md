@@ -12,6 +12,43 @@ Cubulus is a small territory game built with Python and Pygame.
 - `0`: reset the zoom
 - `Esc`: open or close the pause menu during a match
 
+## Language
+
+Open **Options** and change **Language / Sprache** with the left and right
+arrow keys (or by clicking the row). The complete interface can be switched
+between German and English. The selection is saved automatically.
+
+## Custom maps
+
+Choose **Load custom map / Eigene Map laden** in the main menu and select a
+JSON file. Cubulus validates the file before activating it, so a malformed map
+does not interrupt the game. The selected file is remembered for the next
+start. The **Map / Karte** row can be used to switch between all valid JSON maps
+in the bundled `maps` folder and previously loaded custom maps.
+
+A map uses this format:
+
+```json
+{
+  "name": "My arena",
+  "width": 80,
+  "height": 60,
+  "player_starts": [
+    [2, 2],
+    [77, 2],
+    [2, 57],
+    [77, 57]
+  ]
+}
+```
+
+- `name` is optional; the file name is used when it is omitted.
+- `width` and `height` are required integers from 4 through 500.
+- `player_starts` is optional. It must contain four unique `[x, y]` positions
+  inside the map. If omitted, the four corners are used.
+
+See `maps/example_custom.json` for a ready-to-edit example.
+
 The main menu includes a separate AI-vs-AI arena. Four bots pursue one another,
 claim territory, fight on contact, and automatically begin a new round when a
 winner remains. This simulation is decorative and does not change the player's

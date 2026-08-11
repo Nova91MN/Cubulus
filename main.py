@@ -20,33 +20,176 @@ import config
 
 Coordinate = Tuple[int, int]
 PAUSE_MENU_ITEMS = (
-    "Fortsetzen",
-    "Optionen",
-    "Hauptmenü",
-    "Beenden"
+    "pause_continue",
+    "menu_options",
+    "pause_main_menu",
+    "menu_quit"
 )
 
 MENU_ITEMS = (
-    "Spiel starten",
-    "Spielmodus",
-    "Spielfarbe",
-    "Optionen",
-    "Beenden"
+    "menu_start",
+    "menu_mode",
+    "menu_color",
+    "menu_map",
+    "menu_load_map",
+    "menu_options",
+    "menu_quit"
 )
 
 OPTIONS_MENU_ITEMS = (
-    "Automatische Bewegung",
-    "Kamera-Zoom",
-    "Auflösung",
-    "Debug-Modus",
-    "Spielgeschwindigkeit",
-    "Zurück"
+    "option_auto_move",
+    "option_camera_zoom",
+    "option_resolution",
+    "option_debug",
+    "option_game_speed",
+    "option_language",
+    "option_back"
 )
+
+LANGUAGES = ("de", "en")
+TRANSLATIONS = {
+    "de": {
+        "status_awaiting": "Bereit zum Start",
+        "status_match_running": "Match läuft",
+        "menu_start": "Spiel starten",
+        "menu_mode": "Spielmodus",
+        "menu_color": "Spielfarbe",
+        "menu_map": "Karte",
+        "menu_load_map": "Eigene Map laden",
+        "menu_options": "Optionen",
+        "menu_quit": "Beenden",
+        "pause_continue": "Fortsetzen",
+        "pause_main_menu": "Hauptmenü",
+        "option_auto_move": "Automatische Bewegung",
+        "option_camera_zoom": "Kamera-Zoom",
+        "option_resolution": "Auflösung",
+        "option_debug": "Debug-Modus",
+        "option_game_speed": "Spielgeschwindigkeit",
+        "option_language": "Sprache",
+        "option_back": "Zurück",
+        "language_name": "Deutsch",
+        "mode_untimed": "Endlos",
+        "mode_timed": "10 Minuten",
+        "color_red": "Rot",
+        "color_yellow": "Gelb",
+        "color_green": "Grün",
+        "color_blue": "Blau",
+        "menu_tagline": "TAKTISCHER GEBIETSKAMPF",
+        "menu_subtitle": "Erobere das Raster. Überlebe deine Gegner.",
+        "menu_controls": "↑↓ AUSWAHL     ←→ ÄNDERN     ENTER BESTÄTIGEN",
+        "live_arena": "LIVE  KI-ARENA",
+        "round": "RUNDE {number}",
+        "arena_winner": "{name} GEWINNT",
+        "draw": "UNENTSCHIEDEN",
+        "options_eyebrow": "SPIELEINSTELLUNGEN",
+        "options_title": "OPTIONEN",
+        "options_subtitle": "Steuerung, Anzeige, Sprache und Debug-Werkzeuge.",
+        "options_hint": "W/S AUSWAHL   A/D ÄNDERN   ENTER BESTÄTIGEN   ESC ZURÜCK",
+        "on": "AN",
+        "off": "AUS",
+        "debug_off": "DEBUG AUS",
+        "map_dialog_title": "Cubulus-Map auswählen",
+        "map_dialog_filter": "Cubulus-Maps",
+        "map_loaded": "Map geladen: {name}",
+        "map_load_failed": "Map konnte nicht geladen werden: {error}",
+        "game_over": "SPIELENDE",
+        "victory": "SIEG",
+        "player_lost": "Du hast alle 3 Leben verloren.",
+        "all_eliminated": "Alle Spieler wurden eliminiert.",
+        "eliminated": "{name} wurde eliminiert.",
+        "lost_life": "{name} verlor ein Leben. Noch {lives}.",
+        "winner": "{name} gewinnt!",
+        "time_no_winner": "Zeit abgelaufen. Kein Gewinner.",
+        "time_winner": "Zeit abgelaufen. {name} gewinnt!",
+        "time_tie": "Zeit abgelaufen. Gleichstand zwischen: {names}",
+        "match_active": "MATCH LÄUFT",
+        "ten_minutes": "10 MINUTEN",
+        "endless": "ENDLOS",
+        "pause_short": "ESC  PAUSE",
+        "you": "DU",
+        "territories": "GEBIETE",
+        "match_paused": "MATCH ANGEHALTEN",
+        "paused": "PAUSIERT",
+        "mode": "MODUS",
+        "lives": "LEBEN",
+        "pause_hint": "W/S AUSWAHL   ENTER BESTÄTIGEN   ESC FORTSETZEN",
+        "again_hint": "ENTER: Noch einmal  |  ESC: Beenden",
+    },
+    "en": {
+        "status_awaiting": "Ready to start",
+        "status_match_running": "Match running",
+        "menu_start": "Start game",
+        "menu_mode": "Game mode",
+        "menu_color": "Player color",
+        "menu_map": "Map",
+        "menu_load_map": "Load custom map",
+        "menu_options": "Options",
+        "menu_quit": "Quit",
+        "pause_continue": "Continue",
+        "pause_main_menu": "Main menu",
+        "option_auto_move": "Automatic movement",
+        "option_camera_zoom": "Camera zoom",
+        "option_resolution": "Resolution",
+        "option_debug": "Debug mode",
+        "option_game_speed": "Game speed",
+        "option_language": "Language",
+        "option_back": "Back",
+        "language_name": "English",
+        "mode_untimed": "Untimed",
+        "mode_timed": "10 minutes",
+        "color_red": "Red",
+        "color_yellow": "Yellow",
+        "color_green": "Green",
+        "color_blue": "Blue",
+        "menu_tagline": "TACTICAL TERRITORY COMBAT",
+        "menu_subtitle": "Claim the grid. Outlast your opponents.",
+        "menu_controls": "↑↓ SELECT     ←→ CHANGE     ENTER CONFIRM",
+        "live_arena": "LIVE  AI ARENA",
+        "round": "ROUND {number}",
+        "arena_winner": "{name} WINS",
+        "draw": "DRAW",
+        "options_eyebrow": "GAME SETTINGS",
+        "options_title": "OPTIONS",
+        "options_subtitle": "Controls, display, language and debug tools.",
+        "options_hint": "W/S SELECT   A/D CHANGE   ENTER CONFIRM   ESC BACK",
+        "on": "ON",
+        "off": "OFF",
+        "debug_off": "DEBUG OFF",
+        "map_dialog_title": "Select a Cubulus map",
+        "map_dialog_filter": "Cubulus maps",
+        "map_loaded": "Map loaded: {name}",
+        "map_load_failed": "Could not load map: {error}",
+        "game_over": "GAME OVER",
+        "victory": "VICTORY",
+        "player_lost": "You lost all 3 lives.",
+        "all_eliminated": "All players were eliminated.",
+        "eliminated": "{name} was eliminated.",
+        "lost_life": "{name} lost a life. {lives} remaining.",
+        "winner": "{name} wins!",
+        "time_no_winner": "Time expired. No winner.",
+        "time_winner": "Time expired. {name} wins!",
+        "time_tie": "Time expired. Tie between: {names}",
+        "match_active": "MATCH ACTIVE",
+        "ten_minutes": "10 MINUTES",
+        "endless": "UNTIMED",
+        "pause_short": "ESC  PAUSE",
+        "you": "YOU",
+        "territories": "TERRITORY",
+        "match_paused": "MATCH PAUSED",
+        "paused": "PAUSED",
+        "mode": "MODE",
+        "lives": "LIVES",
+        "pause_hint": "W/S SELECT   ENTER CONFIRM   ESC CONTINUE",
+        "again_hint": "ENTER: Play again  |  ESC: Quit",
+    },
+}
 
 MENU_GRID_WIDTH = 44
 MENU_GRID_HEIGHT = 30
 MENU_BOT_STEP_MS = 82
-SETTINGS_VERSION = 1
+SETTINGS_VERSION = 2
+MIN_MAP_SIZE = 4
+MAX_MAP_SIZE = 500
 
 
 def clamp(value: int, low: int, high: int) -> int:
@@ -116,6 +259,10 @@ class CubulusGame:
 
         self.settings_path = self.get_settings_path()
         saved_settings = self.load_settings()
+        saved_language = saved_settings.get("language")
+        self.language = (
+            saved_language if saved_language in LANGUAGES else "de"
+        )
 
         saved_resolution = saved_settings.get("resolution")
         initial_resolution = (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
@@ -206,18 +353,36 @@ class CubulusGame:
             len(config.PLAYER_COLOR_OPTIONS)
         )
 
-        self.status_message = "Awaiting start"
+        self.status_message = self.t("status_awaiting")
 
         self.board: List[List[str]] = []
         self.players: List[Player] = []
 
         self.territory_counts: Dict[int, int] = {}
 
-        self.map_data = self.load_map()
+        saved_map_path = saved_settings.get("map_path")
+        extra_map_path = (
+            Path(saved_map_path).expanduser()
+            if isinstance(saved_map_path, str) and saved_map_path
+            else None
+        )
+        self.available_maps = self.discover_maps(extra_map_path)
+        if not self.available_maps:
+            raise SystemExit("No valid Cubulus maps were found.")
+        self.map_index = 0
+        if extra_map_path is not None:
+            selected_path = extra_map_path.resolve(strict=False)
+            for index, (path, _) in enumerate(self.available_maps):
+                if path.resolve(strict=False) == selected_path:
+                    self.map_index = index
+                    break
+        self.map_path, self.map_data = self.available_maps[self.map_index]
+        self.map_notice = ""
+        self.map_notice_until = 0
 
         self.match_start_ticks: Optional[int] = None
         self.damage_flash_until = 0
-        self.game_over_title = "SPIELENDE"
+        self.game_over_title = self.t("game_over")
         self.game_over_color = config.COLORS["white"]
 
         # Camera coordinates are expressed in cells. Keeping world and screen
@@ -275,7 +440,7 @@ class CubulusGame:
         self.menu_last_step_ticks = 0
         self.menu_round = 0
         self.menu_round_reset_at: Optional[int] = None
-        self.menu_battle_message = "KI-ARENA WIRD GESTARTET"
+        self.menu_battle_message = self.t("round", number=1)
         self.menu_battle_message_until = 0
         self.menu_clash_position: Optional[Coordinate] = None
         self.menu_clash_until = 0
@@ -284,6 +449,19 @@ class CubulusGame:
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
+
+    def t(self, key: str, **values: object) -> str:
+        """Return a translated UI string for the active language."""
+
+        language_strings = TRANSLATIONS.get(
+            self.language,
+            TRANSLATIONS["de"]
+        )
+        template = language_strings.get(
+            key,
+            TRANSLATIONS["de"].get(key, key)
+        )
+        return template.format(**values)
 
     @staticmethod
     def get_settings_path() -> Path:
@@ -334,6 +512,8 @@ class CubulusGame:
             "game_speed": config.DEBUG_SPEED_OPTIONS[self.game_speed_index],
             "game_mode_index": self.mode_index,
             "player_color_index": self.color_index,
+            "language": self.language,
+            "map_path": str(self.map_path),
         }
 
         temporary_path = self.settings_path.with_suffix(".tmp")
@@ -379,65 +559,185 @@ class CubulusGame:
             return 1.0
         return config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
 
-    def load_map(self) -> Dict:
-
-        # Determine the directory containing main.py.
-        #
-        # When running normally:
-        #     C:\...\Cubulus
-        #
-        # When running through PyInstaller:
-        #     PyInstaller makes the bundled files available relative
-        #     to __file__ as well.
-        base_dir = Path(__file__).resolve().parent
-
-        # The map is therefore searched for relative to the program
-        # instead of at a hard-coded location such as D:\Cubulus.
-        map_path = base_dir / "maps" / "default.json"
+    @staticmethod
+    def load_map_file(map_path: Path) -> Dict:
+        """Read and validate a map without modifying the active match."""
 
         try:
-            with open(
-                map_path,
-                "r",
-                encoding="utf-8"
-            ) as handle:
-
+            with open(map_path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
-
-            print(
-                f"Loaded map: "
-                f"{data.get('name', 'unknown')}"
-            )
-
-            return data
-
-        except FileNotFoundError:
-
-            print(
-                f"Map file not found: {map_path}"
-            )
-
-            sys.exit(1)
-
+        except FileNotFoundError as exc:
+            raise ValueError(f"file not found: {map_path}") from exc
+        except OSError as exc:
+            raise ValueError(str(exc)) from exc
         except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"invalid JSON at line {exc.lineno}, column {exc.colno}"
+            ) from exc
 
-            print(
-                f"Failed to parse map file: {exc}"
+        if not isinstance(data, dict):
+            raise ValueError("the root value must be a JSON object")
+
+        width = data.get("width")
+        height = data.get("height")
+        for label, value in (("width", width), ("height", height)):
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"'{label}' must be an integer")
+            if not MIN_MAP_SIZE <= value <= MAX_MAP_SIZE:
+                raise ValueError(
+                    f"'{label}' must be between {MIN_MAP_SIZE} and "
+                    f"{MAX_MAP_SIZE}"
+                )
+
+        name = data.get("name", map_path.stem)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("'name' must be a non-empty string")
+        name = name.strip()[:64]
+
+        default_starts = [
+            [0, 0],
+            [width - 1, 0],
+            [0, height - 1],
+            [width - 1, height - 1],
+        ]
+        raw_starts = data.get("player_starts", default_starts)
+        if isinstance(raw_starts, dict):
+            raw_starts = [
+                raw_starts.get(str(player_id), raw_starts.get(player_id))
+                for player_id in range(4)
+            ]
+        if not isinstance(raw_starts, list) or len(raw_starts) != 4:
+            raise ValueError("'player_starts' must contain exactly 4 positions")
+
+        player_starts: List[List[int]] = []
+        for player_id, position in enumerate(raw_starts):
+            if (
+                not isinstance(position, (list, tuple))
+                or len(position) != 2
+                or not all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in position
+                )
+            ):
+                raise ValueError(
+                    f"player start {player_id} must be an [x, y] integer pair"
+                )
+            x, y = position
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"player start {player_id} is outside the map"
+                )
+            player_starts.append([x, y])
+
+        if len({tuple(position) for position in player_starts}) != 4:
+            raise ValueError("player starts must be unique")
+
+        normalized = dict(data)
+        normalized.update({
+            "name": name,
+            "width": width,
+            "height": height,
+            "player_starts": player_starts,
+        })
+        print(f"Loaded map: {name} ({width} x {height})")
+        return normalized
+
+    def discover_maps(
+        self,
+        extra_path: Optional[Path] = None
+    ) -> List[Tuple[Path, Dict]]:
+        """Find valid bundled maps plus a previously selected custom map."""
+
+        map_dir = Path(__file__).resolve().parent / "maps"
+        candidates = sorted(
+            map_dir.glob("*.json"),
+            key=lambda path: (path.name != "default.json", path.name.lower())
+        )
+        if extra_path is not None:
+            extra_resolved = extra_path.resolve(strict=False)
+            if all(
+                path.resolve(strict=False) != extra_resolved
+                for path in candidates
+            ):
+                candidates.append(extra_path)
+
+        maps: List[Tuple[Path, Dict]] = []
+        for path in candidates:
+            try:
+                maps.append((path, self.load_map_file(path)))
+            except ValueError as exc:
+                print(f"Skipping invalid map '{path}': {exc}")
+        return maps
+
+    def cycle_map(self, direction: int) -> None:
+        if not self.available_maps:
+            return
+        self.map_index = (
+            self.map_index + direction
+        ) % len(self.available_maps)
+        self.map_path, self.map_data = self.available_maps[self.map_index]
+        self.map_notice = self.t(
+            "map_loaded",
+            name=self.map_data["name"]
+        )
+        self.map_notice_until = pygame.time.get_ticks() + 2200
+        self.save_settings()
+
+    def choose_custom_map(self) -> None:
+        """Open a native file picker and activate a validated JSON map."""
+
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            selected = filedialog.askopenfilename(
+                parent=root,
+                title=self.t("map_dialog_title"),
+                filetypes=(
+                    (self.t("map_dialog_filter"), "*.json"),
+                    ("JSON", "*.json"),
+                )
             )
+            root.destroy()
+        except Exception as exc:
+            selected = ""
+            self.map_notice = self.t("map_load_failed", error=str(exc))
+            self.map_notice_until = pygame.time.get_ticks() + 5000
 
-            sys.exit(1)
+        if not selected:
+            return
+
+        path = Path(selected)
+        try:
+            data = self.load_map_file(path)
+        except ValueError as exc:
+            self.map_notice = self.t("map_load_failed", error=str(exc))
+            self.map_notice_until = pygame.time.get_ticks() + 5000
+            print(self.map_notice)
+            return
+
+        resolved = path.resolve(strict=False)
+        for index, (known_path, _) in enumerate(self.available_maps):
+            if known_path.resolve(strict=False) == resolved:
+                self.available_maps[index] = (path, data)
+                self.map_index = index
+                break
+        else:
+            self.available_maps.append((path, data))
+            self.map_index = len(self.available_maps) - 1
+
+        self.map_path, self.map_data = self.available_maps[self.map_index]
+        self.map_notice = self.t("map_loaded", name=data["name"])
+        self.map_notice_until = pygame.time.get_ticks() + 3500
+        self.save_settings()
 
     def reset_board(self) -> None:
 
-        width = self.map_data.get(
-            "width",
-            config.GRID_WIDTH
-        )
-
-        height = self.map_data.get(
-            "height",
-            config.GRID_HEIGHT
-        )
+        width = self.map_data["width"]
+        height = self.map_data["height"]
 
         self.board = [
             [
@@ -515,11 +815,8 @@ class CubulusGame:
                     f"Player {pid}"
                 ),
 
-                start_position=(
-                    config.PLAYER_STARTS.get(
-                        pid,
-                        (0, 0)
-                    )
+                start_position=tuple(
+                    self.map_data["player_starts"][pid]
                 ),
 
                 color=color,
@@ -621,7 +918,7 @@ class CubulusGame:
         self.camera_zoom = self.preferred_camera_zoom
         self.camera_target_zoom = self.preferred_camera_zoom
         self.damage_flash_until = 0
-        self.game_over_title = "SPIELENDE"
+        self.game_over_title = self.t("game_over")
         self.game_over_color = config.COLORS["white"]
         self.pause_selection = 0
         self.pause_view = "main"
@@ -633,23 +930,21 @@ class CubulusGame:
         self.human_last_move_ticks = self.game_ticks()
         self.match_start_ticks = self.game_ticks()
 
-        self.status_message = (
-            "Match running"
-        )
+        self.status_message = self.t("status_match_running")
 
         self.state = "playing"
 
     def end_match(
         self,
         message: str,
-        title: str = "SPIELENDE",
+        title: Optional[str] = None,
         color: Optional[Tuple[int, int, int]] = None
     ) -> None:
 
         print(message)
 
         self.status_message = message
-        self.game_over_title = title
+        self.game_over_title = title or self.t("game_over")
         self.game_over_color = color or config.COLORS["white"]
 
         self.state = "game_over"
@@ -687,7 +982,7 @@ class CubulusGame:
         self.pause_background = None
         self.menu_view = "main"
         self.menu_selection = 0
-        self.status_message = "Awaiting start"
+        self.status_message = self.t("status_awaiting")
         self.reset_menu_battle()
 
     def reset_menu_battle(self) -> None:
@@ -725,7 +1020,7 @@ class CubulusGame:
         ticks = pygame.time.get_ticks()
         self.menu_last_step_ticks = ticks
         self.menu_round_reset_at = None
-        self.menu_battle_message = f"RUNDE {self.menu_round}"
+        self.menu_battle_message = self.t("round", number=self.menu_round)
         self.menu_battle_message_until = ticks + 1250
         self.menu_clash_position = None
         self.menu_clash_until = 0
@@ -807,7 +1102,9 @@ class CubulusGame:
         alive = [player for player in self.menu_players if player.alive]
         if len(alive) <= 1:
             self.menu_battle_message = (
-                f"{alive[0].name} GEWINNT" if alive else "UNENTSCHIEDEN"
+                self.t("arena_winner", name=alive[0].name)
+                if alive
+                else self.t("draw")
             )
             self.menu_battle_message_until = ticks + 1800
             self.menu_round_reset_at = ticks + 1800
@@ -949,27 +1246,34 @@ class CubulusGame:
             self.draw_menu()
 
     def cycle_menu_option(self, direction: int) -> None:
-        if self.menu_selection == 1:
+        selected = MENU_ITEMS[self.menu_selection]
+        if selected == "menu_mode":
             self.mode_index = (
                 self.mode_index + direction
             ) % len(config.GAME_MODES)
-        elif self.menu_selection == 2:
+        elif selected == "menu_color":
             self.color_index = (
                 self.color_index + direction
             ) % len(config.PLAYER_COLOR_OPTIONS)
+        elif selected == "menu_map":
+            self.cycle_map(direction)
+            return
         else:
             return
         self.save_settings()
 
     def activate_menu_item(self) -> None:
-        if self.menu_selection == 0:
+        selected = MENU_ITEMS[self.menu_selection]
+        if selected == "menu_start":
             self.start_match()
-        elif self.menu_selection in (1, 2):
+        elif selected in ("menu_mode", "menu_color", "menu_map"):
             self.cycle_menu_option(1)
-        elif self.menu_selection == 3:
+        elif selected == "menu_load_map":
+            self.choose_custom_map()
+        elif selected == "menu_options":
             self.options_selection = 0
             self.menu_view = "options"
-        elif self.menu_selection == 4:
+        elif selected == "menu_quit":
             self.running = False
 
     def draw_menu(self) -> None:
@@ -1074,7 +1378,7 @@ class CubulusGame:
         self.screen.blit(panel, (panel_x, panel_y))
 
         eyebrow = self.small_font.render(
-            "TACTICAL TERRITORY COMBAT",
+            self.t("menu_tagline"),
             True,
             (113, 183, 255)
         )
@@ -1084,7 +1388,7 @@ class CubulusGame:
         self.screen.blit(title, (panel_x + 36, panel_y + 52))
 
         subtitle = self.small_font.render(
-            "Erobere das Raster. Überlebe deine Gegner.",
+            self.t("menu_subtitle"),
             True,
             (165, 177, 194)
         )
@@ -1095,18 +1399,21 @@ class CubulusGame:
 
         buttons_top = panel_y + 214
         button_width = panel_width - 84
-        button_height = 56
-        button_gap = 10
+        button_height = 45
+        button_gap = 7
         self.menu_item_rects = []
-        mode_labels = {"Untimed": "Endlos", "Timed": "10 Minuten"}
+        mode_labels = {
+            "Untimed": self.t("mode_untimed"),
+            "Timed": self.t("mode_timed")
+        }
         color_labels = {
-            "red": "Rot",
-            "yellow": "Gelb",
-            "green": "Grün",
-            "blue": "Blau"
+            "red": self.t("color_red"),
+            "yellow": self.t("color_yellow"),
+            "green": self.t("color_green"),
+            "blue": self.t("color_blue")
         }
 
-        for index, item in enumerate(MENU_ITEMS):
+        for index, item_key in enumerate(MENU_ITEMS):
             rect = pygame.Rect(
                 panel_x + 42,
                 buttons_top + index * (button_height + button_gap),
@@ -1121,10 +1428,14 @@ class CubulusGame:
             pygame.draw.rect(self.screen, border, rect, 2 if selected else 1, border_radius=12)
 
             label_color = (255, 255, 255) if selected else (202, 211, 224)
-            label = self.menu_button_font.render(item, True, label_color)
+            label = self.menu_button_font.render(
+                self.t(item_key),
+                True,
+                label_color
+            )
             self.screen.blit(label, (rect.x + 20, rect.centery - label.get_height() // 2))
 
-            if index == 0:
+            if item_key == "menu_start":
                 arrow_x = rect.right - 31
                 pygame.draw.polygon(
                     self.screen,
@@ -1135,7 +1446,7 @@ class CubulusGame:
                         (arrow_x - 5, rect.centery + 8)
                     )
                 )
-            elif index == 1:
+            elif item_key == "menu_mode":
                 value = mode_labels.get(
                     config.GAME_MODES[self.mode_index],
                     config.GAME_MODES[self.mode_index]
@@ -1145,7 +1456,7 @@ class CubulusGame:
                     value_surface,
                     (rect.right - value_surface.get_width() - 18, rect.centery - value_surface.get_height() // 2)
                 )
-            elif index == 2:
+            elif item_key == "menu_color":
                 selected_color = config.PLAYER_COLOR_OPTIONS[self.color_index]
                 value = color_labels.get(selected_color, selected_color)
                 value_surface = self.small_font.render(f"{value}  ›", True, (225, 231, 240))
@@ -1160,13 +1471,27 @@ class CubulusGame:
                     (value_x - 17, rect.centery),
                     7
                 )
-            elif index == 3:
+            elif item_key == "menu_map":
+                value = self.map_data["name"]
+                value_surface = self.small_font.render(
+                    f"‹  {value}  ›",
+                    True,
+                    (113, 183, 255)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 18,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            elif item_key in ("menu_load_map", "menu_options"):
                 arrow = self.menu_button_font.render(">", True, (113, 183, 255))
                 self.screen.blit(
                     arrow,
                     (rect.right - arrow.get_width() - 22, rect.centery - arrow.get_height() // 2)
                 )
-            elif index == 4:
+            elif item_key == "menu_quit":
                 close = self.menu_button_font.render("×", True, (232, 105, 112))
                 self.screen.blit(
                     close,
@@ -1174,7 +1499,11 @@ class CubulusGame:
                 )
 
         controls = self.small_font.render(
-            "↑↓ AUSWAHL     ←→ ÄNDERN     ENTER BESTÄTIGEN",
+            (
+                self.map_notice
+                if pygame.time.get_ticks() < self.map_notice_until
+                else self.t("menu_controls")
+            ),
             True,
             (126, 140, 159)
         )
@@ -1196,7 +1525,11 @@ class CubulusGame:
 
         live_dot = (hud_rect.x + 25, hud_rect.y + 29)
         pygame.draw.circle(self.screen, (255, 73, 88), live_dot, 5)
-        live_label = self.menu_heading_font.render("LIVE  KI-ARENA", True, (244, 247, 252))
+        live_label = self.menu_heading_font.render(
+            self.t("live_arena"),
+            True,
+            (244, 247, 252)
+        )
         self.screen.blit(live_label, (hud_rect.x + 40, hud_rect.y + 15))
 
         territory = self.menu_territory_counts()
@@ -1415,6 +1748,11 @@ class CubulusGame:
 
     def update_bots(self) -> None:
 
+        grid_height = len(self.board)
+        grid_width = len(self.board[0]) if grid_height else 0
+        if not grid_width:
+            return
+
         for player in self.players[1:]:
 
             if not player.alive:
@@ -1438,8 +1776,8 @@ class CubulusGame:
                 player.move(
                     dx,
                     dy,
-                    config.GRID_WIDTH,
-                    config.GRID_HEIGHT
+                    grid_width,
+                    grid_height
                 )
 
                 self.apply_tile_effect(
@@ -1507,8 +1845,9 @@ class CubulusGame:
 
                 if not loser.alive:
 
-                    self.status_message = (
-                        f"{loser.name} eliminated."
+                    self.status_message = self.t(
+                        "eliminated",
+                        name=loser.name
                     )
 
                 else:
@@ -1517,9 +1856,10 @@ class CubulusGame:
                     # collision from draining several lives in succession.
                     loser.position = loser.start_position
                     self.apply_tile_effect(loser)
-                    self.status_message = (
-                        f"{loser.name} lost a life. "
-                        f"{loser.lives} remaining."
+                    self.status_message = self.t(
+                        "lost_life",
+                        name=loser.name,
+                        lives=loser.lives
                     )
 
     def check_victory_conditions(
@@ -1531,8 +1871,8 @@ class CubulusGame:
         if self.players and not self.players[0].alive:
 
             self.end_match(
-                "Du hast alle 3 Leben verloren.",
-                title="GAME OVER",
+                self.t("player_lost"),
+                title=self.t("game_over"),
                 color=config.COLORS["red"]
             )
 
@@ -1541,7 +1881,7 @@ class CubulusGame:
         if not alive:
 
             self.end_match(
-                "Alle Spieler wurden eliminiert."
+                self.t("all_eliminated")
             )
 
             return
@@ -1550,16 +1890,14 @@ class CubulusGame:
 
             winner = alive[0]
 
-            message = (
-                f"{winner.name} wins!"
-            )
+            message = self.t("winner", name=winner.name)
 
             self.end_match(
                 message,
                 title=(
-                    "SIEG"
+                    self.t("victory")
                     if winner.is_human
-                    else "SPIELENDE"
+                    else self.t("game_over")
                 ),
                 color=(
                     config.COLORS["green"]
@@ -1615,9 +1953,7 @@ class CubulusGame:
 
         if not contenders:
 
-            return (
-                "Time expired. No winner."
-            )
+            return self.t("time_no_winner")
 
         # Eliminated players keep the tiles they marked.  They must not set
         # the score to beat, otherwise the timed match can finish without a
@@ -1643,10 +1979,7 @@ class CubulusGame:
 
         if len(leaders) == 1:
 
-            return (
-                f"Time expired. "
-                f"{leaders[0].name} wins!"
-            )
+            return self.t("time_winner", name=leaders[0].name)
 
         if leaders:
 
@@ -1655,14 +1988,9 @@ class CubulusGame:
                 for player in leaders
             )
 
-            return (
-                f"Time expired. "
-                f"Tie between: {names}"
-            )
+            return self.t("time_tie", names=names)
 
-        return (
-            "Time expired. No winner."
-        )
+        return self.t("time_no_winner")
 
     def remaining_time(
         self
@@ -1984,7 +2312,7 @@ class CubulusGame:
             5
         )
         eyebrow = self.small_font.render(
-            "MATCH LÄUFT",
+            self.t("match_active"),
             True,
             (113, 183, 255)
         )
@@ -1997,7 +2325,11 @@ class CubulusGame:
         self.screen.blit(title, (brand_rect.x + 17, brand_rect.y + 35))
 
         mode = config.GAME_MODES[self.mode_index]
-        mode_label = "10 MINUTEN" if mode == "Timed" else "ENDLOS"
+        mode_label = (
+            self.t("ten_minutes")
+            if mode == "Timed"
+            else self.t("endless")
+        )
         remaining = self.remaining_time()
         match_value = (
             f"{remaining // 60:02d}:{remaining % 60:02d}"
@@ -2025,7 +2357,7 @@ class CubulusGame:
         )
         self.screen.blit(value_surface, (info_rect.x + 17, info_rect.y + 34))
         esc_surface = self.small_font.render(
-            "ESC  PAUSE",
+            self.t("pause_short"),
             True,
             (113, 183, 255)
         )
@@ -2099,7 +2431,7 @@ class CubulusGame:
                 (content_x + 6, item_rect.y + 27),
                 6
             )
-            name = "DU" if player.is_human else player.name.upper()
+            name = self.t("you") if player.is_human else player.name.upper()
             name_surface = self.small_font.render(
                 name,
                 True,
@@ -2115,7 +2447,7 @@ class CubulusGame:
             )
             self.screen.blit(score_surface, (content_x, item_rect.y + 48))
             label_surface = self.small_font.render(
-                "GEBIETE",
+                self.t("territories"),
                 True,
                 (126, 140, 159)
             )
@@ -2224,6 +2556,21 @@ class CubulusGame:
                 self.game_speed_index + direction
             ) % len(config.DEBUG_SPEED_OPTIONS)
             self.simulation_accumulator = 0.0
+        elif self.options_selection == 5:
+            language_index = LANGUAGES.index(self.language)
+            self.language = LANGUAGES[
+                (language_index + direction) % len(LANGUAGES)
+            ]
+            self.status_message = self.t(
+                "status_match_running"
+                if self.state in ("playing", "paused")
+                else "status_awaiting"
+            )
+            self.game_over_title = self.t("game_over")
+            self.menu_battle_message = self.t(
+                "round",
+                number=self.menu_round
+            )
         else:
             return
 
@@ -2262,19 +2609,19 @@ class CubulusGame:
         self.draw_glass_panel(panel_rect, fill=(7, 12, 20, 238))
 
         eyebrow = self.small_font.render(
-            "SPIELEINSTELLUNGEN",
+            self.t("options_eyebrow"),
             True,
             (113, 183, 255)
         )
         self.screen.blit(eyebrow, (panel_x + 38, panel_y + 25))
         title = self.menu_heading_font.render(
-            "OPTIONEN",
+            self.t("options_title"),
             True,
             (248, 250, 255)
         )
         self.screen.blit(title, (panel_x + 38, panel_y + 49))
         subtitle = self.small_font.render(
-            "Steuerung, Anzeige und Debug-Werkzeuge.",
+            self.t("options_subtitle"),
             True,
             (151, 165, 184)
         )
@@ -2283,10 +2630,10 @@ class CubulusGame:
         self.options_item_rects = []
         rows_top = panel_y + 120
         row_width = panel_width - 76
-        row_height = 58
-        row_gap = 8
+        row_height = 48
+        row_gap = 6
 
-        for index, label in enumerate(OPTIONS_MENU_ITEMS):
+        for index, label_key in enumerate(OPTIONS_MENU_ITEMS):
             rect = pygame.Rect(
                 panel_x + 38,
                 rows_top + index * (row_height + row_gap),
@@ -2308,7 +2655,7 @@ class CubulusGame:
             )
 
             label_surface = self.menu_button_font.render(
-                label,
+                self.t(label_key),
                 True,
                 (
                     (112, 123, 139)
@@ -2322,7 +2669,7 @@ class CubulusGame:
             )
 
             if index == 0:
-                value = "AN" if self.auto_movement_enabled else "AUS"
+                value = self.t("on") if self.auto_movement_enabled else self.t("off")
                 value_color = (
                     (100, 220, 162)
                     if self.auto_movement_enabled
@@ -2367,7 +2714,7 @@ class CubulusGame:
                     )
                 )
             elif index == 3:
-                value = "AN" if self.debug_mode else "AUS"
+                value = self.t("on") if self.debug_mode else self.t("off")
                 value_color = (
                     (255, 193, 92) if self.debug_mode else (137, 149, 166)
                 )
@@ -2383,11 +2730,28 @@ class CubulusGame:
                 self.screen.blit(value_surface, value_surface.get_rect(center=pill.center))
             elif index == 4:
                 speed = config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
-                value = f"<  {speed:g}x  >" if self.debug_mode else "DEBUG AUS"
+                value = (
+                    f"<  {speed:g}x  >"
+                    if self.debug_mode
+                    else self.t("debug_off")
+                )
                 value_surface = self.small_font.render(
                     value,
                     True,
                     (255, 193, 92) if self.debug_mode else (112, 123, 139)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 20,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            elif index == 5:
+                value_surface = self.small_font.render(
+                    f"<  {self.t('language_name')}  >",
+                    True,
+                    (113, 183, 255)
                 )
                 self.screen.blit(
                     value_surface,
@@ -2404,7 +2768,7 @@ class CubulusGame:
                 )
 
         hint = self.small_font.render(
-            "W/S AUSWAHL   A/D ÄNDERN   ENTER BESTÄTIGEN   ESC ZURÜCK",
+            self.t("options_hint"),
             True,
             (126, 140, 159)
         )
@@ -2501,17 +2865,17 @@ class CubulusGame:
 
         selected = PAUSE_MENU_ITEMS[self.pause_selection]
 
-        if selected == "Fortsetzen":
+        if selected == "pause_continue":
             self.resume_match()
 
-        elif selected == "Optionen":
+        elif selected == "menu_options":
             self.options_selection = 0
             self.pause_view = "options"
 
-        elif selected == "Hauptmenü":
+        elif selected == "pause_main_menu":
             self.return_to_main_menu()
 
-        elif selected == "Beenden":
+        elif selected == "menu_quit":
             self.running = False
 
     def draw_pause_menu(self) -> None:
@@ -2535,7 +2899,7 @@ class CubulusGame:
         self.draw_glass_panel(panel_rect, fill=(7, 12, 20, 240))
 
         status_surface = self.small_font.render(
-            "MATCH ANGEHALTEN",
+            self.t("match_paused"),
             True,
             (113, 183, 255)
         )
@@ -2545,7 +2909,7 @@ class CubulusGame:
         )
 
         title_surface = self.game_over_font.render(
-            "PAUSIERT",
+            self.t("paused"),
             True,
             (248, 250, 255)
         )
@@ -2560,9 +2924,12 @@ class CubulusGame:
         human = self.players[0] if self.players else None
         mode = config.GAME_MODES[self.mode_index]
         stat_values = (
-            ("MODUS", "10 MIN" if mode == "Timed" else "ENDLOS"),
-            ("LEBEN", str(human.lives if human else 0)),
-            ("GEBIETE", str(self.territory_counts.get(0, 0)))
+            (
+                self.t("mode"),
+                self.t("ten_minutes") if mode == "Timed" else self.t("endless")
+            ),
+            (self.t("lives"), str(human.lives if human else 0)),
+            (self.t("territories"), str(self.territory_counts.get(0, 0)))
         )
         stats_rect = pygame.Rect(
             panel_rect.x + 34,
@@ -2601,7 +2968,7 @@ class CubulusGame:
         item_height = 60
         item_gap = 12
 
-        for index, label in enumerate(PAUSE_MENU_ITEMS):
+        for index, label_key in enumerate(PAUSE_MENU_ITEMS):
             rect = pygame.Rect(
                 panel_rect.x + 36,
                 item_y + index * (item_height + item_gap),
@@ -2622,7 +2989,7 @@ class CubulusGame:
             )
 
             surface = self.menu_button_font.render(
-                label,
+                self.t(label_key),
                 True,
                 (248, 250, 255) if selected else (196, 205, 218)
             )
@@ -2641,7 +3008,7 @@ class CubulusGame:
             )
 
         hint_surface = self.small_font.render(
-            "W/S AUSWAHL   ENTER BESTÄTIGEN   ESC FORTSETZEN",
+            self.t("pause_hint"),
             True,
             (126, 140, 159)
         )
@@ -2764,7 +3131,7 @@ class CubulusGame:
         )
 
         hint_surface = self.primary_font.render(
-            "ENTER: Noch einmal  |  ESC: Beenden",
+            self.t("again_hint"),
             True,
             config.COLORS["muted"]
         )
