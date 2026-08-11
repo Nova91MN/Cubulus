@@ -29,7 +29,14 @@ MENU_ITEMS = (
     "Spiel starten",
     "Spielmodus",
     "Spielfarbe",
+    "Optionen",
     "Beenden"
+)
+
+OPTIONS_MENU_ITEMS = (
+    "Automatische Bewegung",
+    "Kamera-Zoom",
+    "Zurück"
 )
 
 MENU_GRID_WIDTH = 44
@@ -184,17 +191,25 @@ class CubulusGame:
         # units separate makes zooming smooth and leaves gameplay untouched.
         self.camera_x = 0.5
         self.camera_y = 0.5
-        self.camera_zoom = config.CAMERA_START_ZOOM
-        self.camera_target_zoom = config.CAMERA_START_ZOOM
+        self.preferred_camera_zoom = config.CAMERA_START_ZOOM
+        self.camera_zoom = self.preferred_camera_zoom
+        self.camera_target_zoom = self.preferred_camera_zoom
         self.frame_dt = 1.0 / config.FPS
 
         self.pause_selection = 0
         self.pause_view = "main"
         self.pause_started_ticks: Optional[int] = None
         self.pause_item_rects: List[pygame.Rect] = []
+        self.pause_background: Optional[pygame.Surface] = None
 
         self.menu_selection = 0
+        self.menu_view = "main"
         self.menu_item_rects: List[pygame.Rect] = []
+        self.options_selection = 0
+        self.options_item_rects: List[pygame.Rect] = []
+        self.auto_movement_enabled = True
+        self.human_move_direction: Optional[Coordinate] = None
+        self.human_last_move_ticks = 0
         self.menu_board: List[List[str]] = []
         self.menu_players: List[Player] = []
         self.menu_last_step_ticks = 0
@@ -449,14 +464,17 @@ class CubulusGame:
         human_x, human_y = self.players[0].position
         self.camera_x = human_x + 0.5
         self.camera_y = human_y + 0.5
-        self.camera_zoom = config.CAMERA_START_ZOOM
-        self.camera_target_zoom = config.CAMERA_START_ZOOM
+        self.camera_zoom = self.preferred_camera_zoom
+        self.camera_target_zoom = self.preferred_camera_zoom
         self.damage_flash_until = 0
         self.game_over_title = "SPIELENDE"
         self.game_over_color = config.COLORS["white"]
         self.pause_selection = 0
         self.pause_view = "main"
         self.pause_started_ticks = None
+        self.pause_background = None
+        self.human_move_direction = None
+        self.human_last_move_ticks = pygame.time.get_ticks()
 
         self.match_start_ticks = (
             pygame.time.get_ticks()
@@ -493,6 +511,8 @@ class CubulusGame:
         self.pause_started_ticks = pygame.time.get_ticks()
         self.pause_selection = 0
         self.pause_view = "main"
+        self.options_selection = 0
+        self.pause_background = self.screen.copy()
         self.state = "paused"
 
     def resume_match(self) -> None:
@@ -520,6 +540,7 @@ class CubulusGame:
             self.damage_flash_until += pause_duration
 
         self.pause_started_ticks = None
+        self.pause_background = None
         self.state = "playing"
 
     def return_to_main_menu(self) -> None:
@@ -527,6 +548,9 @@ class CubulusGame:
         self.state = "menu"
         self.match_start_ticks = None
         self.pause_started_ticks = None
+        self.pause_background = None
+        self.menu_view = "main"
+        self.menu_selection = 0
         self.status_message = "Awaiting start"
         self.reset_menu_battle()
 
@@ -716,9 +740,15 @@ class CubulusGame:
                 if event.type == pygame.KEYDOWN:
 
                     if event.key == pygame.K_ESCAPE:
-
+                        if self.menu_view == "options":
+                            self.menu_view = "main"
+                            continue
                         self.running = False
                         return
+
+                    if self.menu_view == "options":
+                        self.handle_options_key(event.key, "menu")
+                        continue
 
                     if event.key in (pygame.K_UP, pygame.K_w):
                         self.menu_selection = (
@@ -756,16 +786,23 @@ class CubulusGame:
 
                         self.activate_menu_item()
 
-                if event.type == pygame.MOUSEMOTION:
+                if event.type == pygame.MOUSEMOTION and self.menu_view == "main":
                     for index, rect in enumerate(self.menu_item_rects):
                         if rect.collidepoint(event.pos):
                             self.menu_selection = index
                             break
 
+                if event.type == pygame.MOUSEMOTION and self.menu_view == "options":
+                    self.select_option_at(event.pos)
+
                 if (
                     event.type == pygame.MOUSEBUTTONDOWN
                     and event.button == 1
                 ):
+                    if self.menu_view == "options":
+                        if self.select_option_at(event.pos):
+                            self.activate_selected_option("menu")
+                        continue
                     for index, rect in enumerate(self.menu_item_rects):
                         if rect.collidepoint(event.pos):
                             self.menu_selection = index
@@ -791,13 +828,19 @@ class CubulusGame:
         elif self.menu_selection in (1, 2):
             self.cycle_menu_option(1)
         elif self.menu_selection == 3:
+            self.options_selection = 0
+            self.menu_view = "options"
+        elif self.menu_selection == 4:
             self.running = False
 
     def draw_menu(self) -> None:
         width, height = self.screen.get_size()
 
         self.draw_menu_background(width, height)
-        self.draw_menu_panel(width, height)
+        if self.menu_view == "options":
+            self.draw_options_panel(width, height, "menu")
+        else:
+            self.draw_menu_panel(width, height)
         self.draw_menu_arena_hud(width, height)
 
         pygame.display.flip()
@@ -913,8 +956,8 @@ class CubulusGame:
 
         buttons_top = panel_y + 214
         button_width = panel_width - 84
-        button_height = 62
-        button_gap = 13
+        button_height = 56
+        button_gap = 10
         self.menu_item_rects = []
         mode_labels = {"Untimed": "Endlos", "Timed": "10 Minuten"}
         color_labels = {
@@ -977,6 +1020,18 @@ class CubulusGame:
                     config.COLORS[selected_color],
                     (value_x - 17, rect.centery),
                     7
+                )
+            elif index == 3:
+                arrow = self.menu_button_font.render(">", True, (113, 183, 255))
+                self.screen.blit(
+                    arrow,
+                    (rect.right - arrow.get_width() - 22, rect.centery - arrow.get_height() // 2)
+                )
+            elif index == 4:
+                close = self.menu_button_font.render("×", True, (232, 105, 112))
+                self.screen.blit(
+                    close,
+                    (rect.right - close.get_width() - 22, rect.centery - close.get_height() // 2)
                 )
 
         controls = self.small_font.render(
@@ -1114,22 +1169,45 @@ class CubulusGame:
                     dx, dy = moves[
                         event.key
                     ]
-
-                    human.move(
-                        dx,
-                        dy,
-                        config.GRID_WIDTH,
-                        config.GRID_HEIGHT
-                    )
-
-                    self.apply_tile_effect(
-                        human
-                    )
+                    if self.auto_movement_enabled:
+                        self.human_move_direction = (dx, dy)
+                    self.move_human(dx, dy)
+                    self.human_last_move_ticks = pygame.time.get_ticks()
 
             if event.type == pygame.MOUSEWHEEL:
                 self.change_zoom(
                     event.y * config.CAMERA_ZOOM_STEP
                 )
+
+    def move_human(self, dx: int, dy: int) -> None:
+
+        if not self.players:
+            return
+
+        human = self.players[0]
+        if not human.alive:
+            return
+
+        grid_height = len(self.board)
+        grid_width = len(self.board[0]) if grid_height else 0
+        if grid_width == 0:
+            return
+
+        human.move(dx, dy, grid_width, grid_height)
+        self.apply_tile_effect(human)
+
+    def update_human_auto_movement(self) -> None:
+
+        if not self.auto_movement_enabled or self.human_move_direction is None:
+            return
+
+        ticks = pygame.time.get_ticks()
+        if ticks - self.human_last_move_ticks < config.PLAYER_MOVE_INTERVAL_MS:
+            return
+
+        dx, dy = self.human_move_direction
+        self.move_human(dx, dy)
+        self.human_last_move_ticks = ticks
 
     def change_zoom(self, amount: float) -> None:
 
@@ -1167,6 +1245,8 @@ class CubulusGame:
 
         if not self.running:
             return
+
+        self.update_human_auto_movement()
 
         self.update_bots()
 
@@ -1896,6 +1976,189 @@ class CubulusGame:
         self.screen.blit(panel, rect.topleft)
 
     # ------------------------------------------------------------------
+    # Shared options
+    # ------------------------------------------------------------------
+
+    def handle_options_key(self, key: int, source: str) -> None:
+
+        if key in (pygame.K_UP, pygame.K_w):
+            self.options_selection = (
+                self.options_selection - 1
+            ) % len(OPTIONS_MENU_ITEMS)
+        elif key in (pygame.K_DOWN, pygame.K_s):
+            self.options_selection = (
+                self.options_selection + 1
+            ) % len(OPTIONS_MENU_ITEMS)
+        elif key in (
+            pygame.K_LEFT,
+            pygame.K_a,
+            pygame.K_MINUS,
+            pygame.K_KP_MINUS
+        ):
+            self.adjust_selected_option(-1)
+        elif key in (
+            pygame.K_RIGHT,
+            pygame.K_d,
+            pygame.K_PLUS,
+            pygame.K_EQUALS,
+            pygame.K_KP_PLUS
+        ):
+            self.adjust_selected_option(1)
+        elif key in (pygame.K_0, pygame.K_KP0):
+            if self.options_selection == 1:
+                self.preferred_camera_zoom = config.CAMERA_START_ZOOM
+                self.camera_target_zoom = self.preferred_camera_zoom
+        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            self.activate_selected_option(source)
+
+    def adjust_selected_option(self, direction: int) -> None:
+
+        if self.options_selection == 0:
+            self.auto_movement_enabled = not self.auto_movement_enabled
+            if not self.auto_movement_enabled:
+                self.human_move_direction = None
+        elif self.options_selection == 1:
+            self.change_zoom(direction * config.CAMERA_ZOOM_STEP)
+            self.preferred_camera_zoom = self.camera_target_zoom
+
+    def activate_selected_option(self, source: str) -> None:
+
+        if self.options_selection == 0:
+            self.adjust_selected_option(1)
+        elif self.options_selection == 1:
+            self.adjust_selected_option(1)
+        else:
+            if source == "pause":
+                self.pause_view = "main"
+            else:
+                self.menu_view = "main"
+
+    def select_option_at(self, position: Coordinate) -> bool:
+
+        for index, rect in enumerate(self.options_item_rects):
+            if rect.collidepoint(position):
+                self.options_selection = index
+                return True
+
+        return False
+
+    def draw_options_panel(self, width: int, height: int, source: str) -> None:
+
+        panel_width = min(560, max(390, int(width * 0.48)))
+        panel_height = min(610, max(520, height - 100))
+        panel_x = (
+            max(28, int(width * 0.055))
+            if source == "menu"
+            else (width - panel_width) // 2
+        )
+        panel_y = max(28, (height - panel_height) // 2)
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+        self.draw_glass_panel(panel_rect, fill=(7, 12, 20, 238))
+
+        eyebrow = self.small_font.render(
+            "SPIELEINSTELLUNGEN",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(eyebrow, (panel_x + 38, panel_y + 31))
+        title = self.menu_heading_font.render(
+            "OPTIONEN",
+            True,
+            (248, 250, 255)
+        )
+        self.screen.blit(title, (panel_x + 38, panel_y + 58))
+        subtitle = self.small_font.render(
+            "Passe Steuerung und Ansicht an.",
+            True,
+            (151, 165, 184)
+        )
+        self.screen.blit(subtitle, (panel_x + 38, panel_y + 94))
+
+        self.options_item_rects = []
+        rows_top = panel_y + 142
+        row_width = panel_width - 76
+        row_height = 82
+        row_gap = 14
+
+        for index, label in enumerate(OPTIONS_MENU_ITEMS):
+            rect = pygame.Rect(
+                panel_x + 38,
+                rows_top + index * (row_height + row_gap),
+                row_width,
+                row_height
+            )
+            self.options_item_rects.append(rect)
+            selected = index == self.options_selection
+            fill = (25, 38, 55, 248) if selected else (14, 22, 33, 226)
+            border = (83, 166, 255) if selected else (58, 72, 91)
+            pygame.draw.rect(self.screen, fill, rect, border_radius=14)
+            pygame.draw.rect(
+                self.screen,
+                border,
+                rect,
+                2 if selected else 1,
+                border_radius=14
+            )
+
+            label_surface = self.menu_button_font.render(
+                label,
+                True,
+                (244, 247, 252) if selected else (196, 205, 218)
+            )
+            self.screen.blit(
+                label_surface,
+                (rect.x + 20, rect.centery - label_surface.get_height() // 2)
+            )
+
+            if index == 0:
+                value = "AN" if self.auto_movement_enabled else "AUS"
+                value_color = (
+                    (100, 220, 162)
+                    if self.auto_movement_enabled
+                    else (137, 149, 166)
+                )
+                value_surface = self.small_font.render(value, True, value_color)
+                pill = pygame.Rect(
+                    rect.right - 82,
+                    rect.centery - 17,
+                    58,
+                    34
+                )
+                pygame.draw.rect(self.screen, (22, 40, 48), pill, border_radius=17)
+                pygame.draw.rect(self.screen, value_color, pill, 1, border_radius=17)
+                self.screen.blit(value_surface, value_surface.get_rect(center=pill.center))
+            elif index == 1:
+                zoom_percent = round(self.camera_target_zoom * 100)
+                value_surface = self.small_font.render(
+                    f"<  {zoom_percent} %  >",
+                    True,
+                    (113, 183, 255)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 20,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            else:
+                arrow = self.menu_button_font.render("<", True, (113, 183, 255))
+                self.screen.blit(
+                    arrow,
+                    (rect.right - arrow.get_width() - 24, rect.centery - arrow.get_height() // 2)
+                )
+
+        hint = self.small_font.render(
+            "W/S AUSWAHL   A/D ÄNDERN   ENTER BESTÄTIGEN   ESC ZURÜCK",
+            True,
+            (126, 140, 159)
+        )
+        self.screen.blit(
+            hint,
+            (panel_x + 38, panel_rect.bottom - 42)
+        )
+
+    # ------------------------------------------------------------------
     # Pause menu
     # ------------------------------------------------------------------
 
@@ -1934,29 +2197,7 @@ class CubulusGame:
                             self.activate_pause_option()
 
                     else:
-
-                        if event.key in (
-                            pygame.K_LEFT,
-                            pygame.K_a,
-                            pygame.K_MINUS,
-                            pygame.K_KP_MINUS
-                        ):
-                            self.change_zoom(-config.CAMERA_ZOOM_STEP)
-
-                        elif event.key in (
-                            pygame.K_RIGHT,
-                            pygame.K_d,
-                            pygame.K_PLUS,
-                            pygame.K_EQUALS,
-                            pygame.K_KP_PLUS
-                        ):
-                            self.change_zoom(config.CAMERA_ZOOM_STEP)
-
-                        elif event.key in (pygame.K_0, pygame.K_KP0):
-                            self.camera_target_zoom = config.CAMERA_START_ZOOM
-
-                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                            self.pause_view = "main"
+                        self.handle_options_key(event.key, "pause")
 
                 if self.pause_view == "main":
 
@@ -1969,6 +2210,18 @@ class CubulusGame:
                         and self.select_pause_item_at(event.pos)
                     ):
                         self.activate_pause_option()
+
+                elif self.pause_view == "options":
+
+                    if event.type == pygame.MOUSEMOTION:
+                        self.select_option_at(event.pos)
+
+                    if (
+                        event.type == pygame.MOUSEBUTTONDOWN
+                        and event.button == 1
+                        and self.select_option_at(event.pos)
+                    ):
+                        self.activate_selected_option("pause")
 
             if self.state != "paused" or not self.running:
                 return
@@ -1993,6 +2246,7 @@ class CubulusGame:
             self.resume_match()
 
         elif selected == "Optionen":
+            self.options_selection = 0
             self.pause_view = "options"
 
         elif selected == "Hauptmenü":
@@ -2003,57 +2257,139 @@ class CubulusGame:
 
     def draw_pause_menu(self) -> None:
 
-        self.screen.fill(config.COLORS["background"])
         width, height = self.screen.get_size()
+        self.draw_pause_backdrop(width, height)
 
         if self.pause_view == "options":
             self.draw_pause_options(width, height)
             pygame.display.flip()
             return
 
-        title_surface = self.title_font.render(
+        panel_width = min(580, max(390, int(width * 0.52)))
+        panel_height = min(650, max(540, height - 60))
+        panel_rect = pygame.Rect(
+            (width - panel_width) // 2,
+            (height - panel_height) // 2,
+            panel_width,
+            panel_height
+        )
+        self.draw_glass_panel(panel_rect, fill=(7, 12, 20, 240))
+
+        status_surface = self.small_font.render(
+            "MATCH ANGEHALTEN",
+            True,
+            (113, 183, 255)
+        )
+        self.screen.blit(
+            status_surface,
+            status_surface.get_rect(center=(panel_rect.centerx, panel_rect.y + 35))
+        )
+
+        title_surface = self.game_over_font.render(
             "PAUSIERT",
             True,
-            config.COLORS["white"]
+            (248, 250, 255)
         )
         self.screen.blit(
             title_surface,
-            (
-                width // 2 - title_surface.get_width() // 2,
-                max(72, int(height * 0.13))
-            )
+            title_surface.get_rect(center=(panel_rect.centerx, panel_rect.y + 81))
         )
 
+        accent = pygame.Rect(panel_rect.centerx - 34, panel_rect.y + 112, 68, 4)
+        pygame.draw.rect(self.screen, (68, 156, 255), accent, border_radius=2)
+
+        human = self.players[0] if self.players else None
+        mode = config.GAME_MODES[self.mode_index]
+        stat_values = (
+            ("MODUS", "10 MIN" if mode == "Timed" else "ENDLOS"),
+            ("LEBEN", str(human.lives if human else 0)),
+            ("GEBIETE", str(self.territory_counts.get(0, 0)))
+        )
+        stats_rect = pygame.Rect(
+            panel_rect.x + 34,
+            panel_rect.y + 132,
+            panel_rect.width - 68,
+            58
+        )
+        stat_width = stats_rect.width / len(stat_values)
+        for index, (label, value) in enumerate(stat_values):
+            stat_rect = pygame.Rect(
+                round(stats_rect.x + index * stat_width),
+                stats_rect.y,
+                round(stat_width),
+                stats_rect.height
+            )
+            if index > 0:
+                pygame.draw.line(
+                    self.screen,
+                    (55, 70, 89),
+                    (stat_rect.left, stat_rect.y + 7),
+                    (stat_rect.left, stat_rect.bottom - 7)
+                )
+            label_surface = self.small_font.render(label, True, (126, 140, 159))
+            value_surface = self.menu_heading_font.render(value, True, (239, 244, 251))
+            self.screen.blit(
+                label_surface,
+                label_surface.get_rect(center=(stat_rect.centerx, stat_rect.y + 11))
+            )
+            self.screen.blit(
+                value_surface,
+                value_surface.get_rect(center=(stat_rect.centerx, stat_rect.y + 38))
+            )
+
         self.pause_item_rects = []
-        item_y = int(height * 0.30)
-        item_gap = max(72, int(height * 0.10))
+        item_y = panel_rect.y + 210
+        item_height = 60
+        item_gap = 12
 
         for index, label in enumerate(PAUSE_MENU_ITEMS):
-            color = (
-                config.COLORS["yellow"]
-                if index == self.pause_selection
-                else config.COLORS["white"]
+            rect = pygame.Rect(
+                panel_rect.x + 36,
+                item_y + index * (item_height + item_gap),
+                panel_rect.width - 72,
+                item_height
             )
-            surface = self.hud_font.render(label, True, color)
-            position = (
-                width // 2 - surface.get_width() // 2,
-                item_y + index * item_gap
+            self.pause_item_rects.append(rect)
+            selected = index == self.pause_selection
+            fill = (25, 38, 55, 248) if selected else (14, 22, 33, 226)
+            border = (83, 166, 255) if selected else (58, 72, 91)
+            pygame.draw.rect(self.screen, fill, rect, border_radius=13)
+            pygame.draw.rect(
+                self.screen,
+                border,
+                rect,
+                2 if selected else 1,
+                border_radius=13
             )
-            self.screen.blit(surface, position)
-            self.pause_item_rects.append(
-                surface.get_rect(topleft=position).inflate(64, 24)
+
+            surface = self.menu_button_font.render(
+                label,
+                True,
+                (248, 250, 255) if selected else (196, 205, 218)
+            )
+            self.screen.blit(
+                surface,
+                (rect.x + 20, rect.centery - surface.get_height() // 2)
+            )
+            marker = self.menu_button_font.render(
+                ">" if index != 3 else "×",
+                True,
+                (113, 183, 255) if index != 3 else (232, 105, 112)
+            )
+            self.screen.blit(
+                marker,
+                (rect.right - marker.get_width() - 22, rect.centery - marker.get_height() // 2)
             )
 
         hint_surface = self.small_font.render(
-            "Pfeiltasten / WASD: Auswählen   •   ENTER: Bestätigen   •   ESC: Fortsetzen",
+            "W/S AUSWAHL   ENTER BESTÄTIGEN   ESC FORTSETZEN",
             True,
-            config.COLORS["muted"]
+            (126, 140, 159)
         )
         self.screen.blit(
             hint_surface,
-            (
-                width // 2 - hint_surface.get_width() // 2,
-                height - 55
+            hint_surface.get_rect(
+                center=(panel_rect.centerx, panel_rect.bottom - 28)
             )
         )
 
@@ -2062,45 +2398,26 @@ class CubulusGame:
     def draw_pause_options(self, width: int, height: int) -> None:
 
         self.pause_item_rects = []
-        title_surface = self.title_font.render(
-            "OPTIONEN",
-            True,
-            config.COLORS["white"]
-        )
-        self.screen.blit(
-            title_surface,
-            (
-                width // 2 - title_surface.get_width() // 2,
-                max(72, int(height * 0.13))
-            )
-        )
+        self.draw_options_panel(width, height, "pause")
 
-        zoom_percent = round(self.camera_target_zoom * 100)
-        zoom_surface = self.hud_font.render(
-            f"‹   Kamera-Zoom: {zoom_percent} %   ›",
-            True,
-            config.COLORS["yellow"]
-        )
-        self.screen.blit(
-            zoom_surface,
-            (
-                width // 2 - zoom_surface.get_width() // 2,
-                int(height * 0.36)
-            )
-        )
+    def draw_pause_backdrop(self, width: int, height: int) -> None:
 
-        hint_surface = self.small_font.render(
-            "Links / Rechts: Anpassen   •   0: Zurücksetzen   •   ESC / ENTER: Zurück",
-            True,
-            config.COLORS["muted"]
+        if self.pause_background is not None:
+            background = self.pause_background
+            if background.get_size() != (width, height):
+                background = pygame.transform.smoothscale(background, (width, height))
+            self.screen.blit(background, (0, 0))
+        else:
+            self.screen.fill((5, 9, 15))
+
+        veil = pygame.Surface((width, height), pygame.SRCALPHA)
+        veil.fill((2, 6, 12, 184))
+        pygame.draw.rect(
+            veil,
+            (12, 35, 58, 52),
+            pygame.Rect(0, 0, width, max(1, height // 3))
         )
-        self.screen.blit(
-            hint_surface,
-            (
-                width // 2 - hint_surface.get_width() // 2,
-                height - 55
-            )
-        )
+        self.screen.blit(veil, (0, 0))
 
     # ------------------------------------------------------------------
     # Game Over

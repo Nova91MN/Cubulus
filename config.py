@@ -23,6 +23,7 @@ DAMAGE_COOLDOWN_MS = 1200
 DAMAGE_FLASH_MS = 280
 BOT_MOVE_CHANCE = 0.4  # Probability a bot attempts a move this frame
 TIMED_MODE_SECONDS = 600
+PLAYER_MOVE_INTERVAL_MS = 85
 
 # Colors used in the game
 COLORS = {
