@@ -11,3 +11,8 @@ __pycache__/
 # Betriebssystem-Dateien
 Thumbs.db
 .DS_Store
+
+# PyInstaller
+build/
+dist/
+*.spec
