@@ -2,6 +2,15 @@
 
 All notable changes to Cubulus are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Pressing `Esc` on the Victory or Game Over screen now returns to the main
+  menu instead of closing the game.
+- Updated the German and English end-screen hints to describe the new `Esc`
+  behavior.
+
 ## [0.3.0] - 2026-08-11
 
 ### Added
@@ -33,4 +42,5 @@ All notable changes to Cubulus are documented in this file.
 - Difficulty settings now store the level name as well as its index while
   preserving selections saved by older Cubulus versions.
 
-[0.3.0]: https://github.com/Nova91MN/Cubulus/compare/0.2.0...main
+[Unreleased]: https://github.com/Nova91MN/Cubulus/compare/0.3.0...main
+[0.3.0]: https://github.com/Nova91MN/Cubulus/compare/0.2.0...0.3.0

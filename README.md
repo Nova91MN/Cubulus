@@ -19,6 +19,8 @@ release notes.
 - Mouse wheel or `+` / `-`: smoothly zoom the camera
 - `0`: reset the zoom
 - `Esc`: open or close the pause menu during a match
+- Victory / Game Over screen: `Enter` starts a new match; `Esc` returns to the
+  main menu without closing the game
 
 ## Player name and difficulty
 
