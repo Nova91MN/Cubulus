@@ -4,6 +4,13 @@ All notable changes to Cubulus are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a Debug-mode infinite-lives option for the human player. Collisions
+  still reset the player and apply the normal damage cooldown.
+- Added an independent `0.25x` to `4x` Debug-mode speed control for the human
+  player's automatic movement.
+
 ### Fixed
 
 - Pressing `Esc` on the Victory or Game Over screen now returns to the main

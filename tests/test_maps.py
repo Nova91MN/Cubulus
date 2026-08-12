@@ -98,6 +98,8 @@ class SettingsTests(unittest.TestCase):
         game.screen = mock.Mock()
         game.screen.get_size.return_value = (960, 720)
         game.debug_mode = False
+        game.infinite_lives_enabled = True
+        game.player_speed_index = config.DEBUG_PLAYER_SPEED_OPTIONS.index(2.0)
         game.game_speed_index = config.DEBUG_SPEED_OPTIONS.index(1.0)
         game.mode_index = 0
         game.color_index = 1
@@ -121,6 +123,8 @@ class SettingsTests(unittest.TestCase):
             settings["difficulty_index"],
         )
         self.assertEqual("Expert", settings["difficulty"])
+        self.assertTrue(settings["infinite_lives_enabled"])
+        self.assertEqual(2.0, settings["player_speed"])
         self.assertEqual("0.3.0", APP_VERSION)
 
     def test_player_name_is_sanitized(self) -> None:
@@ -131,6 +135,89 @@ class SettingsTests(unittest.TestCase):
 class TranslationTests(unittest.TestCase):
     def test_languages_have_the_same_keys(self) -> None:
         self.assertEqual(set(TRANSLATIONS["de"]), set(TRANSLATIONS["en"]))
+
+
+class DebugToolsTests(unittest.TestCase):
+    @staticmethod
+    def make_game() -> CubulusGame:
+        game = CubulusGame.__new__(CubulusGame)
+        game.mode_index = config.GAME_MODES.index("Untimed")
+        game.difficulty_index = config.DIFFICULTY_LEVELS.index("Normal")
+        game.language = "en"
+        game.debug_mode = True
+        game.infinite_lives_enabled = True
+        game.player_speed_index = config.DEBUG_PLAYER_SPEED_OPTIONS.index(2.0)
+        game.damage_flash_until = 0
+        game.status_message = ""
+        game.territory_counts = {}
+        return game
+
+    def test_debug_infinite_lives_protect_only_the_human_player(self) -> None:
+        game = self.make_game()
+        game.board = [
+            ["yellow", "yellow"],
+            ["red", "neutral"],
+        ]
+        human = Player(0, "Nova", (1, 1), "red", is_human=True)
+        human.position = (0, 0)
+        bot = Player(1, "Bot-1", (0, 0), "yellow")
+        game.players = [human, bot]
+        game.game_ticks = lambda: 1000
+
+        game.resolve_collisions()
+
+        self.assertEqual(config.PLAYER_LIVES, human.lives)
+        self.assertTrue(human.alive)
+        self.assertEqual((1, 1), human.position)
+        self.assertEqual(1000 + config.DAMAGE_COOLDOWN_MS, human.invulnerable_until)
+        self.assertEqual(
+            "Nova lost no life thanks to debug mode.",
+            game.status_message,
+        )
+        self.assertFalse(game.player_has_infinite_lives(bot))
+
+    def test_infinite_lives_setting_is_inactive_without_debug_mode(self) -> None:
+        game = self.make_game()
+        game.debug_mode = False
+        human = Player(0, "Nova", (0, 0), "red", is_human=True)
+
+        self.assertFalse(game.player_has_infinite_lives(human))
+
+    def test_player_speed_changes_only_the_human_move_interval(self) -> None:
+        game = self.make_game()
+
+        self.assertEqual(2.0, game.effective_player_speed())
+        self.assertAlmostEqual(
+            config.PLAYER_MOVE_INTERVAL_MS / 2.0,
+            game.human_move_interval_ms(),
+        )
+
+        game.debug_mode = False
+        self.assertEqual(1.0, game.effective_player_speed())
+        self.assertEqual(
+            float(config.PLAYER_MOVE_INTERVAL_MS),
+            game.human_move_interval_ms(),
+        )
+
+    def test_auto_movement_uses_the_selected_player_speed(self) -> None:
+        game = self.make_game()
+        game.board = [["neutral"] * 4]
+        human = Player(0, "Nova", (0, 0), "red", is_human=True)
+        game.players = [human]
+        game.auto_movement_enabled = True
+        game.human_move_direction = (1, 0)
+        game.human_last_move_ticks = 0.0
+        ticks = [42]
+        game.game_ticks = lambda: ticks[0]
+
+        game.update_human_auto_movement()
+        self.assertEqual((0, 0), human.position)
+
+        ticks[0] = 43
+        game.update_human_auto_movement()
+        self.assertEqual((1, 0), human.position)
+        self.assertEqual(config.PLAYER_MOVE_INTERVAL_MS / 2.0, game.human_last_move_ticks)
+
 
 
 class GameOverTests(unittest.TestCase):

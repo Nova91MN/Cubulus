@@ -47,6 +47,8 @@ OPTIONS_MENU_ITEMS = (
     "option_camera_zoom",
     "option_resolution",
     "option_debug",
+    "option_infinite_lives",
+    "option_player_speed",
     "option_game_speed",
     "option_language",
     "option_back"
@@ -73,6 +75,8 @@ TRANSLATIONS = {
         "option_camera_zoom": "Kamera-Zoom",
         "option_resolution": "Auflösung",
         "option_debug": "Debug-Modus",
+        "option_infinite_lives": "Unendliche Leben",
+        "option_player_speed": "Spielertempo",
         "option_game_speed": "Spielgeschwindigkeit",
         "option_language": "Sprache",
         "option_back": "Zurück",
@@ -129,6 +133,7 @@ TRANSLATIONS = {
         "match_active": "MATCH LÄUFT",
         "ten_minutes": "10 MINUTEN",
         "endless": "ENDLOS",
+        "debug_life_saved": "{name} verlor dank Debug-Modus kein Leben.",
         "territory_target": "ZIEL {percent}%",
         "infinite": "UNENDLICH",
         "pause_short": "ESC  PAUSE",
@@ -177,6 +182,8 @@ TRANSLATIONS = {
         "option_camera_zoom": "Camera zoom",
         "option_resolution": "Resolution",
         "option_debug": "Debug mode",
+        "option_infinite_lives": "Infinite lives",
+        "option_player_speed": "Player speed",
         "option_game_speed": "Game speed",
         "option_language": "Language",
         "option_back": "Back",
@@ -233,6 +240,7 @@ TRANSLATIONS = {
         "match_active": "MATCH ACTIVE",
         "ten_minutes": "10 MINUTES",
         "endless": "UNTIMED",
+        "debug_life_saved": "{name} lost no life thanks to debug mode.",
         "territory_target": "TARGET {percent}%",
         "infinite": "INFINITE",
         "pause_short": "ESC  PAUSE",
@@ -545,6 +553,20 @@ class CubulusGame:
             and float(saved_game_speed) in config.DEBUG_SPEED_OPTIONS
             else config.DEBUG_SPEED_OPTIONS.index(1.0)
         )
+        saved_infinite_lives = saved_settings.get("infinite_lives_enabled")
+        self.infinite_lives_enabled = (
+            saved_infinite_lives
+            if isinstance(saved_infinite_lives, bool)
+            else False
+        )
+        saved_player_speed = saved_settings.get("player_speed")
+        self.player_speed_index = (
+            config.DEBUG_PLAYER_SPEED_OPTIONS.index(float(saved_player_speed))
+            if isinstance(saved_player_speed, (int, float))
+            and not isinstance(saved_player_speed, bool)
+            and float(saved_player_speed) in config.DEBUG_PLAYER_SPEED_OPTIONS
+            else config.DEBUG_PLAYER_SPEED_OPTIONS.index(1.0)
+        )
         self.human_move_direction: Optional[Coordinate] = None
         self.human_last_move_ticks = 0
         self.menu_board: List[List[str]] = []
@@ -686,6 +708,10 @@ class CubulusGame:
             "camera_zoom": round(self.preferred_camera_zoom, 2),
             "resolution": list(self.screen.get_size()),
             "debug_mode": self.debug_mode,
+            "infinite_lives_enabled": self.infinite_lives_enabled,
+            "player_speed": config.DEBUG_PLAYER_SPEED_OPTIONS[
+                self.player_speed_index
+            ],
             "game_speed": config.DEBUG_SPEED_OPTIONS[self.game_speed_index],
             "game_mode_index": self.mode_index,
             "player_color_index": self.color_index,
@@ -738,6 +764,27 @@ class CubulusGame:
         if not self.debug_mode:
             return 1.0
         return config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
+
+    def debug_infinite_lives_active(self) -> bool:
+        return bool(
+            getattr(self, "debug_mode", False)
+            and getattr(self, "infinite_lives_enabled", False)
+        )
+
+    def player_has_infinite_lives(self, player: Player) -> bool:
+        return self.is_territory_mode() or (
+            player.is_human and self.debug_infinite_lives_active()
+        )
+
+    def effective_player_speed(self) -> float:
+        if not getattr(self, "debug_mode", False):
+            return 1.0
+        default_index = config.DEBUG_PLAYER_SPEED_OPTIONS.index(1.0)
+        speed_index = getattr(self, "player_speed_index", default_index)
+        return config.DEBUG_PLAYER_SPEED_OPTIONS[speed_index]
+
+    def human_move_interval_ms(self) -> float:
+        return config.PLAYER_MOVE_INTERVAL_MS / self.effective_player_speed()
 
     @staticmethod
     def load_map_file(map_path: Path) -> Dict:
@@ -2401,12 +2448,14 @@ class CubulusGame:
             return
 
         ticks = self.game_ticks()
-        if ticks - self.human_last_move_ticks < config.PLAYER_MOVE_INTERVAL_MS:
+        move_interval = self.human_move_interval_ms()
+        if ticks - self.human_last_move_ticks < move_interval:
             return
 
         dx, dy = self.human_move_direction
-        self.move_human(dx, dy)
-        self.human_last_move_ticks = ticks
+        while ticks - self.human_last_move_ticks >= move_interval:
+            self.move_human(dx, dy)
+            self.human_last_move_ticks += move_interval
 
     def change_zoom(self, amount: float) -> None:
 
@@ -2591,7 +2640,7 @@ class CubulusGame:
 
             for loser in losers:
 
-                if self.is_territory_mode():
+                if self.player_has_infinite_lives(loser):
                     if current_ticks < loser.invulnerable_until:
                         continue
                     loser.invulnerable_until = (
@@ -2603,10 +2652,12 @@ class CubulusGame:
                         self.damage_flash_until = (
                             current_ticks + config.DAMAGE_FLASH_MS
                         )
-                    self.status_message = self.t(
-                        "territory_reset",
-                        name=loser.name
+                    message_key = (
+                        "territory_reset"
+                        if self.is_territory_mode()
+                        else "debug_life_saved"
                     )
+                    self.status_message = self.t(message_key, name=loser.name)
                     continue
 
                 if not loser.take_damage(current_ticks):
@@ -2861,8 +2912,11 @@ class CubulusGame:
             return
 
         speed = config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
+        player_speed = self.effective_player_speed()
+        life_state = "INF" if self.debug_infinite_lives_active() else "NORMAL"
         label = self.small_font.render(
-            f"DEBUG  |  SIMULATION {speed:g}x",
+            f"DEBUG  |  SIM {speed:g}x  |  PLAYER {player_speed:g}x"
+            f"  |  LIVES {life_state}",
             True,
             (255, 206, 112)
         )
@@ -2870,7 +2924,7 @@ class CubulusGame:
         padding_y = 8
         rect = pygame.Rect(
             self.screen.get_width() - label.get_width() - padding_x * 2 - 18,
-            18,
+            104,
             label.get_width() + padding_x * 2,
             label.get_height() + padding_y * 2
         )
@@ -3274,7 +3328,7 @@ class CubulusGame:
             )
 
             pip_y = item_rect.y + (63 if compact else 72)
-            if self.is_territory_mode():
+            if self.player_has_infinite_lives(player):
                 infinity_surface = self.menu_heading_font.render(
                     "∞",
                     True,
@@ -3382,11 +3436,22 @@ class CubulusGame:
         elif self.options_selection == 4:
             if not self.debug_mode:
                 return
+            self.infinite_lives_enabled = not self.infinite_lives_enabled
+        elif self.options_selection == 5:
+            if not self.debug_mode:
+                return
+            self.player_speed_index = (
+                self.player_speed_index + direction
+            ) % len(config.DEBUG_PLAYER_SPEED_OPTIONS)
+            self.human_last_move_ticks = self.game_ticks()
+        elif self.options_selection == 6:
+            if not self.debug_mode:
+                return
             self.game_speed_index = (
                 self.game_speed_index + direction
             ) % len(config.DEBUG_SPEED_OPTIONS)
             self.simulation_accumulator = 0.0
-        elif self.options_selection == 5:
+        elif self.options_selection == 7:
             language_index = LANGUAGES.index(self.language)
             self.language = LANGUAGES[
                 (language_index + direction) % len(LANGUAGES)
@@ -3460,8 +3525,16 @@ class CubulusGame:
         self.options_item_rects = []
         rows_top = panel_y + 120
         row_width = panel_width - 76
-        row_height = 48
-        row_gap = 6
+        row_gap = 4 if panel_height < 620 else 6
+        available_rows_height = panel_height - 180
+        row_height = min(
+            48,
+            max(
+                34,
+                (available_rows_height - row_gap * (len(OPTIONS_MENU_ITEMS) - 1))
+                // len(OPTIONS_MENU_ITEMS)
+            )
+        )
 
         for index, label_key in enumerate(OPTIONS_MENU_ITEMS):
             rect = pygame.Rect(
@@ -3472,7 +3545,7 @@ class CubulusGame:
             )
             self.options_item_rects.append(rect)
             selected = index == self.options_selection
-            disabled = index == 4 and not self.debug_mode
+            disabled = index in (4, 5, 6) and not self.debug_mode
             fill = (25, 38, 55, 248) if selected else (14, 22, 33, 226)
             border = (83, 166, 255) if selected else (58, 72, 91)
             pygame.draw.rect(self.screen, fill, rect, border_radius=14)
@@ -3559,6 +3632,43 @@ class CubulusGame:
                 pygame.draw.rect(self.screen, value_color, pill, 1, border_radius=17)
                 self.screen.blit(value_surface, value_surface.get_rect(center=pill.center))
             elif index == 4:
+                active = self.debug_mode and self.infinite_lives_enabled
+                value = (
+                    self.t("on") if active else self.t("off")
+                ) if self.debug_mode else self.t("debug_off")
+                value_color = (
+                    (255, 193, 92) if active else (137, 149, 166)
+                )
+                value_surface = self.small_font.render(value, True, value_color)
+                pill = pygame.Rect(
+                    rect.right - 102,
+                    rect.centery - 17,
+                    78,
+                    34
+                )
+                pygame.draw.rect(self.screen, (42, 35, 23), pill, border_radius=17)
+                pygame.draw.rect(self.screen, value_color, pill, 1, border_radius=17)
+                self.screen.blit(value_surface, value_surface.get_rect(center=pill.center))
+            elif index == 5:
+                speed = config.DEBUG_PLAYER_SPEED_OPTIONS[self.player_speed_index]
+                value = (
+                    f"<  {speed:g}x  >"
+                    if self.debug_mode
+                    else self.t("debug_off")
+                )
+                value_surface = self.small_font.render(
+                    value,
+                    True,
+                    (255, 193, 92) if self.debug_mode else (112, 123, 139)
+                )
+                self.screen.blit(
+                    value_surface,
+                    (
+                        rect.right - value_surface.get_width() - 20,
+                        rect.centery - value_surface.get_height() // 2
+                    )
+                )
+            elif index == 6:
                 speed = config.DEBUG_SPEED_OPTIONS[self.game_speed_index]
                 value = (
                     f"<  {speed:g}x  >"
@@ -3577,7 +3687,7 @@ class CubulusGame:
                         rect.centery - value_surface.get_height() // 2
                     )
                 )
-            elif index == 5:
+            elif index == 7:
                 value_surface = self.small_font.render(
                     f"<  {self.t('language_name')}  >",
                     True,
@@ -3770,8 +3880,9 @@ class CubulusGame:
             (
                 self.t("lives"),
                 self.t("infinite")
-                if mode == "Territory"
-                else str(human.lives if human else 0)
+                if human is not None
+                and self.player_has_infinite_lives(human)
+                else str(human.lives if human is not None else 0)
             ),
             (self.t("territories"), str(self.territory_counts.get(0, 0)))
         )

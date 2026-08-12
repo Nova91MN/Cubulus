@@ -138,11 +138,19 @@ automatically and restored the next time the game starts. On Windows the file
 is stored at `%APPDATA%\Cubulus\settings.json`; on Linux and macOS it is stored
 below `$XDG_CONFIG_HOME/cubulus` (or `~/.config/cubulus`).
 
-Debug mode unlocks a gameplay speed control with `0.25x`, `0.5x`, `1x`, `2x`,
-and `4x` simulation rates. The multiplier affects movement, bots, match timers,
-camera updates, and damage cooldowns. A badge in the top-right corner shows
-when debug mode is active. The decorative AI arena in the main menu remains at
-normal speed.
+Debug mode unlocks three additional controls:
+
+- **Infinite lives** protects the human player from losing lives. A lost
+  collision still triggers the damage feedback, cooldown, and return to the
+  spawn point. Bots keep their normal lives.
+- **Player speed** offers `0.25x`, `0.5x`, `1x`, `2x`, and `4x` rates for the
+  human player's automatic movement without changing bot or timer speed.
+- **Game speed** offers the same rates for the complete simulation, affecting
+  movement, bots, match timers, camera updates, and damage cooldowns.
+
+The top-right debug badge shows all active values. The decorative AI arena in
+the main menu remains at normal speed. Debug preferences are saved, but only
+take effect while Debug mode is enabled.
 
 The redesigned pause menu keeps the frozen arena visible behind a dark glass
 overlay. It freezes the match timer and damage cooldowns, shows a compact match

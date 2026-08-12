@@ -18,6 +18,10 @@ RESOLUTION_OPTIONS = (
 # The selected multiplier only affects gameplay while debug mode is enabled.
 DEBUG_SPEED_OPTIONS = (0.25, 0.5, 1.0, 2.0, 4.0)
 
+# This independent debug multiplier only changes the human player's automatic
+# movement interval. Bots and all other simulation systems keep their speed.
+DEBUG_PLAYER_SPEED_OPTIONS = (0.25, 0.5, 1.0, 2.0, 4.0)
+
 # Camera settings.  CELL_SIZE is the world-space base size of a tile; the
 # displayed size is CELL_SIZE * zoom.
 CAMERA_START_ZOOM = 3.0
