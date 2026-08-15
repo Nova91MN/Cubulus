@@ -1,14 +1,14 @@
-# Cubulus 0.3.0
+# Cubulus 1.1
 
 Cubulus is a small territory game built with Python and Pygame.
 
-## What's new in 0.3.0
+## What's new in 1.1
 
-Version 0.3.0 introduces Territory mode, three additional difficulty levels,
-random names for AI opponents, and six additional player colors. Territory
-mode allows players to conquer claimed tiles and uses difficulty-dependent map
-share goals with infinite lives. See the [changelog](CHANGELOG.md) for the full
-release notes.
+Version 1.1 makes AI opponents more aware of their territory score. Bots that
+fall behind now prioritize claimable tiles and use a shortest-path search to
+reach the nearest available territory before resuming normal pursuit. The
+release also adds separate Debug controls for infinite lives and player speed.
+See the [changelog](CHANGELOG.md) for the full release notes.
 
 ## Controls
 
@@ -55,8 +55,9 @@ selected map share while holding the unique lead wins:
 - Expert: 50%
 - God: 75%
 
-Obstacles are excluded when the required tile count is calculated. Bots keep
-the same movement and pursuit behavior as in the other game modes.
+Obstacles are excluded when the required tile count is calculated. A bot that
+falls well behind prioritizes expansion: it claims an adjacent available tile
+or takes a shortest route toward the nearest one before resuming pursuit.
 
 ## Language
 

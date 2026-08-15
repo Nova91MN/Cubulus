@@ -125,7 +125,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual("Expert", settings["difficulty"])
         self.assertTrue(settings["infinite_lives_enabled"])
         self.assertEqual(2.0, settings["player_speed"])
-        self.assertEqual("0.3.0", APP_VERSION)
+        self.assertEqual("1.1", APP_VERSION)
 
     def test_player_name_is_sanitized(self) -> None:
         self.assertEqual("Nova Player", CubulusGame.sanitize_player_name("  Nova   Player  "))
@@ -308,6 +308,50 @@ class BotAndColorTests(unittest.TestCase):
             self.assertIn(color_name, config.COLORS)
             self.assertIn(f"color_{color_name}", TRANSLATIONS["de"])
             self.assertIn(f"color_{color_name}", TRANSLATIONS["en"])
+
+    @staticmethod
+    def make_bot_game(mode: str = "Untimed") -> tuple[CubulusGame, Player]:
+        game = CubulusGame.__new__(CubulusGame)
+        game.mode_index = config.GAME_MODES.index(mode)
+        game.difficulty_index = config.DIFFICULTY_LEVELS.index("Normal")
+        human = Player(0, "Nova", (4, 0), "red", is_human=True)
+        bot = Player(1, "Bot-1", (0, 0), "yellow")
+        game.players = [human, bot]
+        return game, bot
+
+    def test_bot_that_is_behind_prefers_an_adjacent_claimable_tile(self) -> None:
+        game, bot = self.make_bot_game()
+        game.players[0].position = (0, 0)
+        bot.position = (1, 1)
+        game.board = [
+            ["red", "red", "red"],
+            ["red", "yellow", "neutral"],
+        ]
+
+        move = game.choose_bot_move(bot, chase_chance=1.0)
+
+        self.assertEqual((1, 0), move)
+
+    def test_bot_that_is_behind_takes_shortest_route_to_new_territory(self) -> None:
+        game, bot = self.make_bot_game()
+        game.players[0].position = (2, 0)
+        bot.position = (2, 1)
+        game.board = [
+            ["red", "red", "red", "red", "red", "red"],
+            ["yellow", "yellow", "yellow", "yellow", "neutral", "red"],
+        ]
+
+        move = game.choose_bot_move(bot, chase_chance=1.0)
+
+        self.assertEqual((1, 0), move)
+
+    def test_territory_bot_claims_enemy_tile_during_opening(self) -> None:
+        game, bot = self.make_bot_game("Territory")
+        game.board = [["yellow", "red", *("neutral" for _ in range(38))]]
+
+        move = game.choose_bot_move(bot, chase_chance=0.0)
+
+        self.assertEqual((1, 0), move)
 
 
 class TerritoryModeTests(unittest.TestCase):

@@ -4,11 +4,12 @@ import os
 import random
 import re
 import sys
+from collections import deque
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "1.1"
 
 print(f"Cubulus v{APP_VERSION} Demo - Python build")
 
@@ -2546,9 +2547,14 @@ class CubulusGame:
         player: Player,
         chase_chance: float
     ) -> Coordinate:
-        """Choose a random or human-seeking move based on difficulty."""
+        """Prefer expansion when behind, otherwise pursue based on difficulty."""
 
         moves = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        if self.bot_needs_more_territory(player):
+            expansion_move = self.choose_bot_expansion_move(player)
+            if expansion_move is not None:
+                return expansion_move
+
         if not self.players or random.random() > chase_chance:
             return random.choice(moves)
 
@@ -2567,6 +2573,88 @@ class CubulusGame:
             reverse=True
         )
         return preferred[0]
+
+    def bot_needs_more_territory(self, player: Player) -> bool:
+        """Return whether a bot is far enough behind to focus on expansion."""
+
+        counts = self.compute_territories()
+        own_tiles = counts.get(player.player_id, 0)
+        rival_tiles = [
+            counts.get(rival.player_id, 0)
+            for rival in self.players
+            if rival.player_id != player.player_id and rival.alive
+        ]
+        leader_tiles = max(rival_tiles, default=0)
+        recovery_target = math.ceil(
+            leader_tiles * config.BOT_TERRITORY_RECOVERY_RATIO
+        )
+
+        if self.is_territory_mode():
+            opening_target = math.ceil(
+                self.territory_target_tiles()
+                * config.BOT_TERRITORY_OPENING_TARGET_RATIO
+            )
+            recovery_target = max(recovery_target, opening_target)
+
+        return own_tiles < recovery_target
+
+    def choose_bot_expansion_move(
+        self,
+        player: Player
+    ) -> Optional[Coordinate]:
+        """Find a shortest first step toward a tile the bot can claim."""
+
+        if not self.board or not self.board[0]:
+            return None
+
+        grid_height = len(self.board)
+        grid_width = len(self.board[0])
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        random.shuffle(directions)
+        territory_mode = self.is_territory_mode()
+
+        def is_claimable(position: Coordinate) -> bool:
+            x, y = position
+            tile = self.board[y][x]
+            if territory_mode:
+                return tile != "obstacle" and tile != player.color
+            return tile == "neutral"
+
+        queue = deque()
+        visited = {player.position}
+
+        for dx, dy in directions:
+            x = player.position[0] + dx
+            y = player.position[1] + dy
+            if not (0 <= x < grid_width and 0 <= y < grid_height):
+                continue
+            if self.board[y][x] == "obstacle":
+                continue
+
+            position = (x, y)
+            if is_claimable(position):
+                return (dx, dy)
+            visited.add(position)
+            queue.append((position, (dx, dy)))
+
+        while queue:
+            (x, y), first_move = queue.popleft()
+            for dx, dy in directions:
+                next_x = x + dx
+                next_y = y + dy
+                position = (next_x, next_y)
+                if (
+                    not (0 <= next_x < grid_width and 0 <= next_y < grid_height)
+                    or position in visited
+                    or self.board[next_y][next_x] == "obstacle"
+                ):
+                    continue
+                if is_claimable(position):
+                    return first_move
+                visited.add(position)
+                queue.append((position, first_move))
+
+        return None
 
     def resolve_collisions(self) -> None:
 

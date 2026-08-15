@@ -4,6 +4,8 @@ All notable changes to Cubulus are documented in this file.
 
 ## [Unreleased]
 
+## [1.1] - 2026-08-15
+
 ### Added
 
 - Added a Debug-mode infinite-lives option for the human player. Collisions
@@ -17,6 +19,11 @@ All notable changes to Cubulus are documented in this file.
   menu instead of closing the game.
 - Updated the German and English end-screen hints to describe the new `Esc`
   behavior.
+
+### Changed
+
+- Bots that own too few tiles now prioritize immediately claimable territory
+  or take a shortest route toward the nearest available tile.
 
 ## [0.3.0] - 2026-08-11
 
@@ -49,5 +56,6 @@ All notable changes to Cubulus are documented in this file.
 - Difficulty settings now store the level name as well as its index while
   preserving selections saved by older Cubulus versions.
 
-[Unreleased]: https://github.com/Nova91MN/Cubulus/compare/0.3.0...main
+[Unreleased]: https://github.com/Nova91MN/Cubulus/compare/1.1...main
+[1.1]: https://github.com/Nova91MN/Cubulus/compare/1.0.0...1.1
 [0.3.0]: https://github.com/Nova91MN/Cubulus/compare/0.2.0...0.3.0

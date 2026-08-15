@@ -38,6 +38,12 @@ DAMAGE_FLASH_MS = 280
 TIMED_MODE_SECONDS = 600
 PLAYER_MOVE_INTERVAL_MS = 85
 
+# Bots switch from chasing to expanding when their territory falls below this
+# share of the leading player's territory. In Territory mode they also expand
+# until they have secured this share of the selected victory target.
+BOT_TERRITORY_RECOVERY_RATIO = 0.75
+BOT_TERRITORY_OPENING_TARGET_RATIO = 0.50
+
 # Difficulty affects how often bots move and how consistently they pursue the
 # human player. In Territory mode it also defines the share of all playable
 # tiles a color has to conquer to win.
