@@ -4,6 +4,19 @@ All notable changes to Cubulus are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a Pygbag/WebAssembly build so Cubulus can run in modern browsers.
+- Added a GitHub Pages workflow that tests, builds, and deploys the browser
+  version on every push to `main`.
+
+### Changed
+
+- The game loop now yields once per frame so browser input and rendering stay
+  responsive while preserving the desktop build.
+- Browser builds show a clear notice instead of opening the unsupported native
+  custom-map file dialog.
+
 ## [1.1] - 2026-08-15
 
 ### Added

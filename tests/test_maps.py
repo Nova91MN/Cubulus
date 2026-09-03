@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import types
 import unittest
@@ -135,6 +136,53 @@ class SettingsTests(unittest.TestCase):
 class TranslationTests(unittest.TestCase):
     def test_languages_have_the_same_keys(self) -> None:
         self.assertEqual(set(TRANSLATIONS["de"]), set(TRANSLATIONS["en"]))
+
+
+class BrowserCompatibilityTests(unittest.TestCase):
+    def test_async_loop_dispatches_frames_cooperatively(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.running = True
+        game.cooperative_loop = False
+        frame_count = 0
+
+        def run_frame() -> None:
+            nonlocal frame_count
+            frame_count += 1
+            if frame_count == 2:
+                game.running = False
+
+        game.run_current_state = mock.Mock(side_effect=run_frame)
+        game.save_settings = mock.Mock()
+
+        with (
+            mock.patch("main.IS_BROWSER", True),
+            mock.patch.object(
+                sys.modules["pygame"], "quit", create=True
+            ) as quit_pygame,
+        ):
+            asyncio.run(game.run_async())
+
+        self.assertEqual(2, frame_count)
+        self.assertFalse(game.cooperative_loop)
+        game.save_settings.assert_called_once_with()
+        quit_pygame.assert_not_called()
+
+    def test_browser_custom_map_picker_returns_a_notice(self) -> None:
+        game = CubulusGame.__new__(CubulusGame)
+        game.language = "en"
+
+        with (
+            mock.patch("main.IS_BROWSER", True),
+            mock.patch.object(
+                sys.modules["pygame"],
+                "time",
+                types.SimpleNamespace(get_ticks=lambda: 100),
+            ),
+        ):
+            game.choose_custom_map()
+
+        self.assertIn("file picker is not available", game.map_notice)
+        self.assertEqual(5100, game.map_notice_until)
 
 
 class DebugToolsTests(unittest.TestCase):

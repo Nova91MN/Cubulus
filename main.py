@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 import os
@@ -10,13 +11,14 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
 APP_VERSION = "1.1"
+IS_BROWSER = sys.platform in ("emscripten", "wasi")
 
 print(f"Cubulus v{APP_VERSION} Demo - Python build")
 
 try:
     import pygame
 except ImportError:
-    print("pygame is not installed. Please run: pip install pygame")
+    print("pygame-ce is not installed. Please run: pip install -r requirements.txt")
     sys.exit(1)
 
 import config
@@ -119,6 +121,9 @@ TRANSLATIONS = {
         "map_dialog_filter": "Cubulus-Maps",
         "map_loaded": "Map geladen: {name}",
         "map_load_failed": "Map konnte nicht geladen werden: {error}",
+        "browser_file_picker_unavailable": (
+            "Der Dateidialog ist im Browser nicht verfügbar."
+        ),
         "game_over": "SPIELENDE",
         "victory": "SIEG",
         "player_lost": "Du hast alle 3 Leben verloren.",
@@ -226,6 +231,9 @@ TRANSLATIONS = {
         "map_dialog_filter": "Cubulus maps",
         "map_loaded": "Map loaded: {name}",
         "map_load_failed": "Could not load map: {error}",
+        "browser_file_picker_unavailable": (
+            "The file picker is not available in the browser."
+        ),
         "game_over": "GAME OVER",
         "victory": "VICTORY",
         "player_lost": "You lost all 3 lives.",
@@ -432,6 +440,10 @@ class CubulusGame:
 
         self.running = True
         self.state = "menu"
+        # Pygbag runs on the browser's main thread. In cooperative mode each
+        # state loop renders exactly one frame before returning to run_async(),
+        # which then yields control back to the browser.
+        self.cooperative_loop = False
 
         self.mode_index = self.valid_saved_index(
             saved_settings.get("game_mode_index"),
@@ -941,6 +953,14 @@ class CubulusGame:
     def choose_custom_map(self) -> None:
         """Open a native file picker and activate a validated JSON map."""
 
+        if IS_BROWSER:
+            self.map_notice = self.t(
+                "map_load_failed",
+                error=self.t("browser_file_picker_unavailable")
+            )
+            self.map_notice_until = pygame.time.get_ticks() + 5000
+            return
+
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -1228,6 +1248,8 @@ class CubulusGame:
                     self.handle_editor_click(event.pos, event.button)
 
             self.draw_editor()
+            if getattr(self, "cooperative_loop", False):
+                return
 
     def draw_editor(self) -> None:
         width, height = self.screen.get_size()
@@ -1925,6 +1947,8 @@ class CubulusGame:
 
             self.update_menu_battle()
             self.draw_menu()
+            if getattr(self, "cooperative_loop", False):
+                return
 
     def cycle_menu_option(self, direction: int) -> None:
         selected = MENU_ITEMS[self.menu_selection]
@@ -2363,6 +2387,8 @@ class CubulusGame:
                     return
 
             self.draw_gameplay()
+            if getattr(self, "cooperative_loop", False):
+                return
 
     def handle_game_events(self) -> None:
 
@@ -3879,6 +3905,8 @@ class CubulusGame:
 
             self.draw_pause_menu()
             self.clock.tick(config.FPS)
+            if getattr(self, "cooperative_loop", False):
+                return
 
     def select_pause_item_at(self, position: Coordinate) -> bool:
 
@@ -4134,6 +4162,8 @@ class CubulusGame:
             self.clock.tick(
                 config.FPS
             )
+            if getattr(self, "cooperative_loop", False):
+                return
 
     def draw_game_over(self) -> None:
 
@@ -4192,42 +4222,48 @@ class CubulusGame:
     # Main loop
     # ------------------------------------------------------------------
 
+    def run_current_state(self) -> None:
+
+        if self.state == "menu":
+            self.menu_loop()
+        elif self.state == "playing":
+            self.playing_loop()
+        elif self.state == "paused":
+            self.pause_loop()
+        elif self.state == "game_over":
+            self.game_over_loop()
+        elif self.state == "editor":
+            self.editor_loop()
+
     def run(self) -> None:
 
         while self.running:
-
-            if self.state == "menu":
-
-                self.menu_loop()
-
-            elif self.state == "playing":
-
-                self.playing_loop()
-
-            elif self.state == "paused":
-
-                self.pause_loop()
-
-            elif self.state == "game_over":
-
-                self.game_over_loop()
-
-            elif self.state == "editor":
-
-                self.editor_loop()
+            self.run_current_state()
 
         self.save_settings()
         pygame.quit()
 
-        sys.exit(0)
+    async def run_async(self) -> None:
+        """Run one state frame at a time and yield to a browser event loop."""
+
+        self.cooperative_loop = True
+        try:
+            while self.running:
+                self.run_current_state()
+                await asyncio.sleep(0)
+        finally:
+            self.cooperative_loop = False
+            self.save_settings()
+            if not IS_BROWSER:
+                pygame.quit()
 
 
-def main() -> None:
+async def main() -> None:
 
     game = CubulusGame()
 
-    game.run()
+    await game.run_async()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

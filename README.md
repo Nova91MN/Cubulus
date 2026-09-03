@@ -2,6 +2,47 @@
 
 Cubulus is a small territory game built with Python and Pygame.
 
+## Play Cubulus
+
+### In the browser
+
+[Play Cubulus online](https://nova91mn.github.io/Cubulus/). The first start can
+take a moment while the Python/WebAssembly runtime is loaded. The game itself
+then runs locally in the browser and needs no installation.
+
+The bundled maps, game modes, controls, pause menu, and level editor work in
+the browser. The native **Load custom map** file dialog is desktop-only; maps
+created in the browser's level editor remain available for the current browser
+session.
+
+Every push to `main` is tested, built with Pygbag, and deployed by the
+`Test and deploy browser game` GitHub Actions workflow. For the first
+deployment, select **GitHub Actions** as the source under
+**Settings → Pages** in the repository.
+
+### On the desktop
+
+Python 3.10 or newer is recommended.
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+python -m pip install -r requirements.txt
+python main.py
+```
+
+### Build the browser version locally
+
+```bash
+python -m pip install -r requirements-web.txt
+python -X utf8 -m pygbag --build --ume_block 0 --can_close 0 --title Cubulus .
+python -m http.server 8000 --directory build/web
+```
+
+Then open `http://localhost:8000`. Do not open `build/web/index.html` directly;
+WebAssembly assets need to be served over HTTP.
+
 ## What's new in 1.1
 
 Version 1.1 makes AI opponents more aware of their territory score. Bots that
